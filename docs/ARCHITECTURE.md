@@ -21,9 +21,17 @@ developer CLI                         public browser / webhook
 ```
 
 The Worker validates an API token against D1 before it accepts a tunnel. D1 is
-the permanent control plane: it stores accounts, SHA-256 hashes of 256-bit
-random tokens, service reservations, quotas, and audit events. Plaintext tokens
-are returned only once when created and are never stored by the service.
+the permanent control plane: it stores GitHub identity IDs, accounts, SHA-256
+hashes of 256-bit random tokens, service reservations, quotas, and audit events.
+Plaintext RunPublic tokens are returned only once and are never stored by the
+service.
+
+For self-service login, the CLI uses GitHub's OAuth device flow with no requested
+repository scopes. The edge exchanges the approved device code, calls GitHub's
+`/user` endpoint, provisions exactly one account for the immutable GitHub user
+ID, issues a RunPublic token, and discards the GitHub access token. A unique D1
+index on `accounts.github_user_id` prevents duplicate identities even during
+concurrent login attempts.
 
 The full `(account, project, service)` tuple and the generated hostname both
 have database uniqueness constraints. A long generated DNS label includes a
@@ -56,6 +64,8 @@ origin. Removing that route rolls traffic back to Railway without a DNS change.
 
 - Only an authenticated account token may open a tunnel in that account's
   namespace.
+- Self-service namespaces are bound to an immutable GitHub user ID, not only a
+  changeable username.
 - The operator admin API exists only on `edge.runpublic.dev`, requires a secret
   stored as a Cloudflare Worker secret, and never accepts that secret in a URL.
 - Public tunnel traffic is intentionally unauthenticated unless the developer's

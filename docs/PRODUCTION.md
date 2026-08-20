@@ -21,7 +21,7 @@ The Railway edge is retained as a single-replica fallback.
    Copy the returned database ID into `cloudflare/wrangler.jsonc` in place of
    `REPLACE_WITH_D1_DATABASE_ID`.
 
-3. Apply the schema:
+3. Apply every D1 migration:
 
    ```bash
    npm run cloudflare:migrate
@@ -36,7 +36,14 @@ The Railway edge is retained as a single-replica fallback.
    npx wrangler secret put RUNPUBLIC_ADMIN_SECRET --config cloudflare/wrangler.jsonc
    ```
 
-5. Validate and deploy:
+5. Register a GitHub OAuth app owned by the operator organization. Use
+   `https://runpublic.dev` as its homepage and callback URL, enable Device Flow,
+   and set the public client ID as `RUNPUBLIC_GITHUB_CLIENT_ID` in
+   `cloudflare/wrangler.jsonc`. No client secret is needed for GitHub device
+   flow. Keep `RUNPUBLIC_SIGNUPS_ENABLED=false` until the policies, rate limits,
+   and smoke checks below are complete.
+
+6. Validate and deploy:
 
    ```bash
    npm run check
@@ -44,13 +51,23 @@ The Railway edge is retained as a single-replica fallback.
    curl https://edge.runpublic.dev/health
    ```
 
-The existing proxied wildcard DNS record is sufficient for the Worker route.
-Do not delete the Railway custom domain while it is the rollback origin.
+The wildcard route handles tunnel hostnames. The apex `runpublic.dev` entry is a
+Worker Custom Domain, so Cloudflare creates its DNS record and certificate. Do
+not delete the Railway custom domain while it is the rollback origin.
 
-## Create a developer account
+7. Verify `runpublic login --no-browser` with a test GitHub account, then change
+   `RUNPUBLIC_SIGNUPS_ENABLED` to `true`, deploy again, and repeat the login,
+   HTTP, webhook, and WebSocket smoke tests.
 
-The included admin tool reads the environment override or the private default
-file described above:
+## Create or recover a developer account
+
+Developers normally run `runpublic login`. GitHub device login provisions one
+account per immutable GitHub user ID and gives it the configured free service
+quota.
+
+The operator tool remains available for support recovery, service accounts, and
+private installations. It reads the environment override or the private default
+admin-secret file:
 
 ```bash
 npm run cloudflare:admin -- create-account keshavmac 25
@@ -96,10 +113,11 @@ a D1 migration destructively; deploy forward-compatible code first.
 ## Secrets and data
 
 - Cloudflare secret: `RUNPUBLIC_ADMIN_SECRET`.
-- D1 stores account metadata, token hashes, reservations, and audit events.
+- D1 stores GitHub user IDs, account metadata, token hashes, reservations, and
+  audit events. GitHub access tokens are used transiently and are not stored.
 - Developer machines store their plaintext token in
   `~/.config/runpublic/config.json` with mode `0600` by default.
 - Do not log authorization headers, plaintext tokens, request bodies, or webhook
   contents.
-- Define and publish retention, acceptable-use, privacy, and abuse-response
-  policies before opening self-service signup.
+- Review the published privacy, acceptable-use, and abuse-response policies
+  before opening self-service signup.

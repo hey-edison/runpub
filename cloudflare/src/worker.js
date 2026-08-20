@@ -8,6 +8,8 @@ const DEFAULT_MAX_PUBLIC_WEBSOCKETS = 128;
 const DEFAULT_REQUESTS_PER_MINUTE = 600;
 const STREAM_CHUNK_BYTES = 64 * 1024;
 const ADMIN_BODY_LIMIT = 16 * 1024;
+const DEFAULT_FREE_MAX_SERVICES = 10;
+const GITHUB_API_VERSION = '2022-11-28';
 const HOP_BY_HOP = new Set([
   'connection',
   'keep-alive',
@@ -29,6 +31,7 @@ function responseHeaders(extra = {}) {
     'cache-control': 'no-store',
     'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
     'referrer-policy': 'no-referrer',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
     ...extra,
@@ -48,6 +51,54 @@ function text(message, status = 200, extraHeaders = {}) {
     headers: responseHeaders({
       'content-type': 'text/plain; charset=utf-8',
       ...extraHeaders,
+    }),
+  });
+}
+
+function landingPage(domain) {
+  const repository = 'https://github.com/hey-edison/runpublic';
+  return new Response(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Stable public HTTPS URLs for local frontend, backend, and webhook development.">
+  <title>RunPublic — localhost, publicly reachable</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: #f7f8fc; background: radial-gradient(circle at 20% 0%, #273063 0, #101426 38%, #080a12 78%); }
+    main { width: min(760px, calc(100% - 40px)); padding: 72px 0; }
+    .eyebrow { color: #9facff; font-size: 14px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 18px 0; max-width: 700px; font-size: clamp(46px, 9vw, 82px); line-height: .96; letter-spacing: -.055em; }
+    p { max-width: 650px; color: #b8bed2; font-size: clamp(18px, 2.7vw, 22px); line-height: 1.55; }
+    pre { margin: 34px 0; padding: 20px 22px; overflow-x: auto; border: 1px solid #333a59; border-radius: 14px; background: rgba(5, 7, 14, .78); color: #dfe3ff; font: 15px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    nav { display: flex; flex-wrap: wrap; gap: 12px; }
+    a { padding: 11px 16px; border: 1px solid #495277; border-radius: 10px; color: #f7f8fc; font-weight: 650; text-decoration: none; }
+    a.primary { border-color: #8592ff; background: #6f7cff; color: #080a12; }
+    .note { margin-top: 30px; color: #828aa5; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">RunPublic</div>
+    <h1>localhost, publicly reachable.</h1>
+    <p>Give every local frontend, API, and webhook a stable HTTPS URL. Install one CLI, sign in with GitHub, and keep your Cloudflare setup out of every developer's way.</p>
+    <pre><code>npm install --global runpublic
+runpublic login
+runpublic expose 3000 --project my-app --service frontend</code></pre>
+    <nav>
+      <a class="primary" href="${repository}">View on GitHub</a>
+      <a href="${repository}/#readme">Read the docs</a>
+      <a href="${repository}/discussions">Share feedback</a>
+    </nav>
+    <div class="note">Public beta · Hosted on Cloudflare at ${domain} · No end-user Cloudflare account required</div>
+  </main>
+</body>
+</html>`, {
+    headers: responseHeaders({
+      'content-type': 'text/html; charset=utf-8',
+      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     }),
   });
 }
@@ -369,6 +420,202 @@ async function handleMe(request, env) {
   });
 }
 
+function githubAuthEnabled(env) {
+  return env.RUNPUBLIC_SIGNUPS_ENABLED === 'true' && Boolean(env.RUNPUBLIC_GITHUB_CLIENT_ID);
+}
+
+async function githubFormRequest(url, fields) {
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+        'user-agent': 'runpublic-edge',
+      },
+      body: new URLSearchParams(fields).toString(),
+    });
+  } catch {
+    throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub login is temporarily unavailable', 502);
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub login is temporarily unavailable', 502);
+  }
+  return payload;
+}
+
+async function startGithubDeviceLogin(env) {
+  if (!githubAuthEnabled(env)) {
+    throw new RequestError('SIGNUP_UNAVAILABLE', 'GitHub sign-in is not configured', 503);
+  }
+  const payload = await githubFormRequest('https://github.com/login/device/code', {
+    client_id: env.RUNPUBLIC_GITHUB_CLIENT_ID,
+  });
+  if (!payload.device_code || !payload.user_code || !payload.verification_uri) {
+    throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub returned an invalid login response', 502);
+  }
+  return json({
+    deviceCode: payload.device_code,
+    userCode: payload.user_code,
+    verificationUri: payload.verification_uri,
+    expiresIn: Number(payload.expires_in || 900),
+    interval: Number(payload.interval || 5),
+  });
+}
+
+async function githubUser(accessToken) {
+  let response;
+  try {
+    response = await fetch('https://api.github.com/user', {
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${accessToken}`,
+        'user-agent': 'runpublic-edge',
+        'x-github-api-version': GITHUB_API_VERSION,
+      },
+    });
+  } catch {
+    throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub login is temporarily unavailable', 502);
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.id || !payload.login) {
+    throw new RequestError('GITHUB_IDENTITY_INVALID', 'GitHub could not verify this identity', 401);
+  }
+  return payload;
+}
+
+async function accountForGithub(env, user, requestedSlug) {
+  const githubUserId = String(user.id);
+  let account = await env.DB.prepare(
+    `SELECT id, slug, max_services AS maxServices
+       FROM accounts WHERE github_user_id = ? LIMIT 1`,
+  ).bind(githubUserId).first();
+  if (account) return account;
+
+  const explicitSlug = requestedSlug ? validateName(requestedSlug, 'account') : '';
+  const base = explicitSlug || sanitizeDnsLabel(user.login, 'github-user').slice(0, DNS_LABEL_LIMIT);
+  const suffix = (await sha256(githubUserId)).slice(0, 8);
+  const candidates = explicitSlug
+    ? [explicitSlug]
+    : [
+        base,
+        `${base.slice(0, DNS_LABEL_LIMIT - suffix.length - 1).replace(/-+$/g, '')}-${suffix}`,
+      ];
+  const maxServices = envInteger(
+    env,
+    'RUNPUBLIC_FREE_MAX_SERVICES',
+    DEFAULT_FREE_MAX_SERVICES,
+  );
+
+  for (const slug of candidates) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO accounts
+           (id, slug, display_name, status, max_services, github_user_id)
+         VALUES (?, ?, ?, 'active', ?, ?)`,
+      ).bind(
+        crypto.randomUUID(),
+        slug,
+        String(user.name || user.login).slice(0, 120),
+        maxServices,
+        githubUserId,
+      ).run();
+    } catch (error) {
+      if (!/unique|constraint/i.test(String(error?.message || error))) throw error;
+    }
+    account = await env.DB.prepare(
+      `SELECT id, slug, max_services AS maxServices
+         FROM accounts WHERE github_user_id = ? LIMIT 1`,
+    ).bind(githubUserId).first();
+    if (account) return account;
+  }
+  throw new RequestError(
+    'ACCOUNT_CONFLICT',
+    explicitSlug
+      ? `The RunPublic account name "${explicitSlug}" is already reserved`
+      : 'Could not reserve a RunPublic account name',
+    409,
+  );
+}
+
+async function issueGithubLoginToken(env, account, user) {
+  const token = randomToken();
+  const tokenId = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO api_tokens (id, account_id, name, token_prefix, token_hash)
+       VALUES (?, ?, 'github-device', ?, ?)`,
+    ).bind(tokenId, account.id, token.slice(0, 16), await sha256(token)),
+    env.DB.prepare(
+      `INSERT INTO audit_log (id, account_id, action, metadata_json)
+       VALUES (?, ?, 'github.login', ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      account.id,
+      JSON.stringify({ githubUserId: String(user.id), githubLogin: user.login, tokenId }),
+    ),
+  ]);
+  await env.DB.prepare(
+    `UPDATE api_tokens SET revoked_at = CURRENT_TIMESTAMP
+      WHERE account_id = ? AND revoked_at IS NULL AND id NOT IN (
+        SELECT id FROM api_tokens
+         WHERE account_id = ? AND revoked_at IS NULL
+         ORDER BY created_at DESC LIMIT 10
+      )`,
+  ).bind(account.id, account.id).run();
+  return { tokenId, token };
+}
+
+async function pollGithubDeviceLogin(request, env) {
+  if (!githubAuthEnabled(env)) {
+    throw new RequestError('SIGNUP_UNAVAILABLE', 'GitHub sign-in is not configured', 503);
+  }
+  const body = await parseSmallJson(request);
+  const deviceCode = String(body.deviceCode || '');
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(deviceCode)) {
+    throw new RequestError('INVALID_DEVICE_CODE', 'The GitHub device code is invalid', 400);
+  }
+  const payload = await githubFormRequest('https://github.com/login/oauth/access_token', {
+    client_id: env.RUNPUBLIC_GITHUB_CLIENT_ID,
+    device_code: deviceCode,
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+  });
+  if (payload.error === 'authorization_pending') {
+    return json({ status: 'pending' }, 202, { 'retry-after': '5' });
+  }
+  if (payload.error === 'slow_down') {
+    return json({ status: 'pending', slowDown: true }, 202, { 'retry-after': '10' });
+  }
+  if (payload.error) {
+    const messages = {
+      access_denied: 'GitHub sign-in was cancelled',
+      expired_token: 'The GitHub device code expired; run login again',
+      incorrect_device_code: 'The GitHub device code is invalid',
+      device_flow_disabled: 'GitHub device login is not enabled for RunPublic',
+    };
+    throw new RequestError(
+      'GITHUB_LOGIN_FAILED',
+      messages[payload.error] || 'GitHub sign-in failed',
+      400,
+    );
+  }
+  if (!payload.access_token) {
+    throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub returned an invalid login response', 502);
+  }
+
+  const user = await githubUser(payload.access_token);
+  const requestedAccount = body.account === undefined ? '' : String(body.account);
+  const account = await accountForGithub(env, user, requestedAccount);
+  const issued = await issueGithubLoginToken(env, account, user);
+  return json({
+    account: account.slug,
+    limits: { services: Number(account.maxServices) },
+    token: { id: issued.tokenId, value: issued.token, shownOnce: true },
+  }, 201);
+}
+
 async function handleAgentConnect(request, env, executionContext, domain) {
   if ((request.headers.get('upgrade') || '').toLowerCase() !== 'websocket') {
     return text('WebSocket upgrade required', 426);
@@ -427,24 +674,42 @@ export default {
         .replace(/\.$/, '');
       const edgeHostname = `edge.${domain}`;
 
+      if (hostname === domain && request.method === 'GET' && url.pathname === '/') {
+        return landingPage(domain);
+      }
+
       if (hostname === edgeHostname && (url.pathname === '/health' || url.pathname === '/healthz')) {
         return json({ status: 'ok', architecture: 'durable-objects', version: '0.2.0' });
       }
       if (hostname === edgeHostname && url.pathname === '/_runpublic/me') {
-        return handleMe(request, env);
+        return await handleMe(request, env);
+      }
+      if (
+        hostname === edgeHostname &&
+        request.method === 'POST' &&
+        url.pathname === '/_runpublic/auth/github/device/start'
+      ) {
+        return await startGithubDeviceLogin(env);
+      }
+      if (
+        hostname === edgeHostname &&
+        request.method === 'POST' &&
+        url.pathname === '/_runpublic/auth/github/device/poll'
+      ) {
+        return await pollGithubDeviceLogin(request, env);
       }
       if (hostname === edgeHostname && url.pathname.startsWith('/_runpublic/admin/')) {
-        return handleAdmin(request, env, url.pathname);
+        return await handleAdmin(request, env, url.pathname);
       }
       if (hostname === edgeHostname && url.pathname === '/_runpublic/connect') {
-        return handleAgentConnect(request, env, executionContext, domain);
+        return await handleAgentConnect(request, env, executionContext, domain);
       }
       if (!isPublicHostname(hostname, domain) || hostname === edgeHostname) {
         return errorResponse('NOT_FOUND', 'RunPublic endpoint not found', 404);
       }
 
       const stub = env.TUNNELS.get(env.TUNNELS.idFromName(hostname));
-      return stub.fetch(request);
+      return await stub.fetch(request);
     } catch (error) {
       if (error instanceof RequestError) {
         return errorResponse(error.code, error.message, error.status);

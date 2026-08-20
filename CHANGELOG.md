@@ -9,6 +9,8 @@
   protocol compatibility.
 - Add tunnel heartbeats, reconnect jitter, login credential verification,
   limits, security headers, and operator administration commands.
+- Add self-service GitHub device login, identity-backed namespace ownership,
+  and a Cloudflare-hosted apex landing page.
 - Add production, architecture, security, contribution, CI, and launch docs.
 
 ## 0.1.0 - 2026-08-21

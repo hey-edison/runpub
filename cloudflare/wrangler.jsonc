@@ -6,6 +6,10 @@
   "workers_dev": false,
   "routes": [
     {
+      "pattern": "runpublic.dev",
+      "custom_domain": true
+    },
+    {
       "pattern": "*.runpublic.dev/*",
       "zone_name": "runpublic.dev"
     }
@@ -16,7 +20,9 @@
     "RUNPUBLIC_REQUEST_TIMEOUT_MS": "30000",
     "RUNPUBLIC_MAX_PENDING_REQUESTS": "128",
     "RUNPUBLIC_MAX_PUBLIC_WEBSOCKETS": "128",
-    "RUNPUBLIC_REQUESTS_PER_MINUTE": "600"
+    "RUNPUBLIC_REQUESTS_PER_MINUTE": "600",
+    "RUNPUBLIC_SIGNUPS_ENABLED": "false",
+    "RUNPUBLIC_FREE_MAX_SERVICES": "10"
   },
   "durable_objects": {
     "bindings": [

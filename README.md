@@ -25,19 +25,20 @@ npm install --global runpublic
 ```
 
 During source development, clone this repository and run `npm install -g .`.
-An invited hosted-beta developer receives an account and token from the
-RunPublic operator, then logs in once:
+Sign in once with GitHub. The device flow asks only for your public GitHub
+identity and creates a unique RunPublic namespace automatically:
 
 ```bash
-runpublic login \
-  --server https://edge.runpublic.dev \
-  --account keshavmac \
-  --token-file /path/to/temporary-token
+runpublic login
 ```
 
-The CLI verifies the token before storing it in
-`~/.config/runpublic/config.json` with private file permissions. Delete the
-temporary token file after login.
+Pass `--account your-name` on the first login when you want a specific available
+namespace; otherwise RunPublic starts from your GitHub username.
+
+The CLI verifies the issued RunPublic token before storing it in
+`~/.config/runpublic/config.json` with private file permissions. For private or
+self-hosted installations, operator-issued token login remains available with
+`runpublic login --server ... --account ... --token-file ...`.
 
 Expose an already-running backend:
 
@@ -99,10 +100,12 @@ public HTTPS request or WebSocket
             -> localhost frontend or backend
 ```
 
-Cloudflare D1 stores accounts, token hashes, quotas, service reservations, and
-audit events. A Durable Object gives one globally consistent active tunnel owner
-per hostname and can hibernate while the WebSocket stays connected. HTTP bodies
-use a bounded chunked protocol rather than one large base64 allocation.
+Cloudflare D1 stores GitHub identity IDs, accounts, token hashes, quotas, service
+reservations, and audit events. The short-lived GitHub device access token is
+used only to verify identity and is not stored. A Durable Object gives one
+globally consistent active tunnel owner per hostname and can hibernate while the
+WebSocket stays connected. HTTP bodies use a bounded chunked protocol rather
+than one large base64 allocation.
 
 The operator owns `runpublic.dev`, Cloudflare, D1, and the hosted edge. End
 users only install the CLI. Read [the architecture](docs/ARCHITECTURE.md) for
@@ -163,6 +166,8 @@ inside that process.
 ## Reliability and security behavior
 
 - Token login is verified server-side; production stores only token hashes.
+- GitHub device login requests no repository scope and never stores the GitHub
+  access token.
 - A newer connection for the same service replaces the older connection.
 - The CLI uses heartbeat detection and jittered automatic reconnects.
 - HTTP and WebSocket traffic have body/message, concurrency, rate, and timeout
@@ -173,7 +178,9 @@ inside that process.
 - Application authentication remains the developer's responsibility; tunnel
   URLs are public by design.
 
-See [SECURITY.md](SECURITY.md) for private reporting and safe-testing rules.
+See [SECURITY.md](SECURITY.md) for private reporting and safe-testing rules,
+[PRIVACY.md](PRIVACY.md) for data handling, and
+[ACCEPTABLE_USE.md](ACCEPTABLE_USE.md) for hosted-service rules.
 
 ## Open source and feedback
 

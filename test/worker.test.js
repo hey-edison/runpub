@@ -37,6 +37,33 @@ test('Cloudflare edge health response does not require database access', async (
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 });
 
+test('Cloudflare edge serves a secure product page at the apex domain', async () => {
+  const response = await worker.fetch(
+    new Request('https://runpublic.dev/'),
+    { RUNPUBLIC_DOMAIN: 'runpublic.dev' },
+    { waitUntil() {} },
+  );
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /npm install --global runpublic/);
+  assert.match(response.headers.get('content-type'), /text\/html/);
+  assert.match(response.headers.get('content-security-policy'), /default-src 'none'/);
+  assert.match(response.headers.get('strict-transport-security'), /includeSubDomains/);
+});
+
+test('GitHub device login fails closed until the operator enables it', async () => {
+  const response = await worker.fetch(
+    new Request('https://edge.runpublic.dev/_runpublic/auth/github/device/start', {
+      method: 'POST',
+    }),
+    { RUNPUBLIC_DOMAIN: 'runpublic.dev', RUNPUBLIC_SIGNUPS_ENABLED: 'false' },
+    { waitUntil() {} },
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: { code: 'SIGNUP_UNAVAILABLE', message: 'GitHub sign-in is not configured' },
+  });
+});
+
 test('Cloudflare edge rejects hostnames outside its managed domain', async () => {
   const response = await worker.fetch(
     new Request('https://attacker.example/'),

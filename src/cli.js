@@ -15,10 +15,13 @@ import {
 } from './config.js';
 import { TunnelClient } from './tunnel-client.js';
 
+const DEFAULT_SERVER = 'https://edge.runpublic.dev';
+
 const HELP = `runpublic - expose local development services over HTTPS
 
 Usage:
-  runpublic login --server <url> --account <name> (--token <token> | --token-file <path>)
+  runpublic login [--server <url>] [--account <namespace>] [--no-browser]
+  runpublic login [--server <url>] --account <name> (--token <token> | --token-file <path>)
   runpublic whoami [--json]
   runpublic init --project <name> [--json]
   runpublic expose <port> --project <name> --service <name> [options]
@@ -60,7 +63,7 @@ function parseArguments(argv) {
     }
 
     const name = argument.slice(2);
-    if (name === 'json' || name === 'help' || name === 'skip-verify') {
+    if (name === 'json' || name === 'help' || name === 'skip-verify' || name === 'no-browser') {
       flags[name] = true;
       continue;
     }
@@ -107,6 +110,10 @@ function createReporter(json) {
         process.stdout.write(`${details.service}: stopped\n`);
       } else if (type === 'login') {
         process.stdout.write(`Logged in as ${details.account} (${details.server})\n`);
+      } else if (type === 'github-device') {
+        process.stdout.write(
+          `Open ${details.verificationUri}\nEnter code: ${details.userCode}\nWaiting for GitHub approval...\n`,
+        );
       } else if (type === 'init') {
         process.stdout.write(`Created ${details.path}\n`);
       } else if (type === 'whoami') {
@@ -121,14 +128,95 @@ function localUrl(protocol, host, port) {
   return `${protocol}://${printableHost}:${port}`;
 }
 
-function credentialEndpoint(server) {
+function edgeEndpoint(server, pathname) {
   const url = new URL(server);
   if (url.protocol === 'ws:') url.protocol = 'http:';
   if (url.protocol === 'wss:') url.protocol = 'https:';
-  url.pathname = '/_runpublic/me';
+  url.pathname = pathname;
   url.search = '';
   url.hash = '';
   return url;
+}
+
+function credentialEndpoint(server) {
+  return edgeEndpoint(server, '/_runpublic/me');
+}
+
+async function responsePayload(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function responseError(payload, response, prefix) {
+  const message = payload?.error?.message || `server returned HTTP ${response.status}`;
+  return new Error(`${prefix}: ${message}`);
+}
+
+function openBrowser(url) {
+  const options = { detached: true, stdio: 'ignore' };
+  let child;
+  if (process.platform === 'darwin') child = spawn('open', [url], options);
+  else if (process.platform === 'win32') child = spawn('cmd', ['/c', 'start', '', url], options);
+  else child = spawn('xdg-open', [url], options);
+  child.once('error', () => {});
+  child.unref();
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function githubDeviceLogin({ server, requestedAccount, noBrowser, reporter }) {
+  const startResponse = await fetch(edgeEndpoint(server, '/_runpublic/auth/github/device/start'), {
+    method: 'POST',
+    headers: { 'user-agent': 'runpublic-cli' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const started = await responsePayload(startResponse);
+  if (!startResponse.ok) throw responseError(started, startResponse, 'GitHub login failed');
+  if (!started.deviceCode || !started.userCode || !started.verificationUri) {
+    throw new Error('GitHub login failed: server returned an invalid device response');
+  }
+
+  reporter.event('github-device', {
+    verificationUri: started.verificationUri,
+    userCode: started.userCode,
+    expiresIn: started.expiresIn,
+  });
+  if (!noBrowser) openBrowser(started.verificationUri);
+
+  const expiresIn = Math.min(Math.max(Number(started.expiresIn) || 900, 60), 1_800);
+  const deadline = Date.now() + expiresIn * 1_000;
+  let intervalSeconds = Math.min(Math.max(Number(started.interval) || 5, 1), 30);
+  while (Date.now() < deadline) {
+    await wait(intervalSeconds * 1_000);
+    const response = await fetch(edgeEndpoint(server, '/_runpublic/auth/github/device/poll'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'user-agent': 'runpublic-cli' },
+      body: JSON.stringify({
+        deviceCode: started.deviceCode,
+        ...(requestedAccount ? { account: requestedAccount } : {}),
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const payload = await responsePayload(response);
+    if (response.status === 202) {
+      const retryAfter = Number(response.headers.get('retry-after'));
+      if (Number.isFinite(retryAfter)) {
+        intervalSeconds = Math.min(Math.max(retryAfter, intervalSeconds), 30);
+      }
+      continue;
+    }
+    if (!response.ok) throw responseError(payload, response, 'GitHub login failed');
+    if (!payload.account || !payload.token?.value) {
+      throw new Error('GitHub login failed: server returned incomplete credentials');
+    }
+    return { account: payload.account, token: payload.token.value };
+  }
+  throw new Error('GitHub login timed out; run "runpublic login" to try again');
 }
 
 async function verifyCredentials({ server, account, token }) {
@@ -136,15 +224,9 @@ async function verifyCredentials({ server, account, token }) {
     headers: { authorization: `Bearer ${token}`, 'user-agent': 'runpublic-cli' },
     signal: AbortSignal.timeout(10_000),
   });
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = {};
-  }
+  const payload = await responsePayload(response);
   if (!response.ok) {
-    const message = payload?.error?.message || `server returned HTTP ${response.status}`;
-    throw new Error(`login verification failed: ${message}`);
+    throw responseError(payload, response, 'login verification failed');
   }
   if (payload.account !== account) {
     throw new Error(
@@ -411,18 +493,45 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'login') {
-      assertAllowedFlags(flags, ['server', 'account', 'token', 'token-file', 'skip-verify', 'json']);
+      assertAllowedFlags(flags, [
+        'server',
+        'account',
+        'token',
+        'token-file',
+        'skip-verify',
+        'no-browser',
+        'json',
+      ]);
       if (positionals.length > 0) throw new Error('login does not accept positional arguments');
-      const server = validateServer(requiredFlag(flags, 'server'));
-      const account = validateName(requiredFlag(flags, 'account'), 'account');
-      const inlineToken = flags.token;
-      const tokenFile = flags['token-file'];
-      if (Boolean(inlineToken) === Boolean(tokenFile)) {
-        throw new Error('provide exactly one of --token or --token-file');
+      const server = validateServer(
+        flags.server ?? process.env.RUNPUBLIC_SERVER ?? process.env.DEVPUBLIC_SERVER ?? DEFAULT_SERVER,
+      );
+      const manualLogin = Boolean(flags.token || flags['token-file'] || flags['skip-verify']);
+      let account;
+      let token;
+      if (manualLogin) {
+        if (flags['no-browser']) throw new Error('--no-browser is only valid for GitHub login');
+        account = validateName(requiredFlag(flags, 'account'), 'account');
+        const inlineToken = flags.token;
+        const tokenFile = flags['token-file'];
+        if (Boolean(inlineToken) === Boolean(tokenFile)) {
+          throw new Error('provide exactly one of --token or --token-file');
+        }
+        token = inlineToken ?? (await readFile(path.resolve(tokenFile), 'utf8')).trim();
+        if (!token) throw new Error('token must be a non-empty string');
+        if (!flags['skip-verify']) await verifyCredentials({ server, account, token });
+      } else {
+        const requestedAccount = flags.account
+          ? validateName(flags.account, 'account')
+          : undefined;
+        ({ account, token } = await githubDeviceLogin({
+          server,
+          requestedAccount,
+          noBrowser: Boolean(flags['no-browser']),
+          reporter,
+        }));
+        await verifyCredentials({ server, account, token });
       }
-      const token = inlineToken ?? (await readFile(path.resolve(tokenFile), 'utf8')).trim();
-      if (!token) throw new Error('token must be a non-empty string');
-      if (!flags['skip-verify']) await verifyCredentials({ server, account, token });
       const filePath = await saveAuthConfig({ server, account, token });
       reporter.event('login', { server, account, path: filePath });
       return 0;
