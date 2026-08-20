@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunPublic project configuration (legacy filename)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "services"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+      "maxLength": 63
+    },
+    "services": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+        "maxLength": 63
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/service"
+      }
+    }
+  },
+  "$defs": {
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "port"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "default": "127.0.0.1"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["http", "https"],
+          "default": "http"
+        },
+        "readyTimeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000,
+          "default": 15000
+        }
+      }
+    }
+  }
+}

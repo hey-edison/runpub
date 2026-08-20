@@ -1,0 +1,34 @@
+name: Feature request
+description: Describe a concrete developer workflow RunPublic could improve.
+title: "[Feature]: "
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the real project and workflow, not only a proposed implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: What do you do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would a good outcome look like?
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often would this help?
+      options:
+        - Every day
+        - Every week
+        - Occasionally
+    validations:
+      required: true

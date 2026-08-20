@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "runpublic-edge",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-20",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "*.runpublic.dev/*",
+      "zone_name": "runpublic.dev"
+    }
+  ],
+  "vars": {
+    "RUNPUBLIC_DOMAIN": "runpublic.dev",
+    "RUNPUBLIC_MAX_BODY_BYTES": "10485760",
+    "RUNPUBLIC_REQUEST_TIMEOUT_MS": "30000",
+    "RUNPUBLIC_MAX_PENDING_REQUESTS": "128",
+    "RUNPUBLIC_MAX_PUBLIC_WEBSOCKETS": "128",
+    "RUNPUBLIC_REQUESTS_PER_MINUTE": "600"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TUNNELS",
+        "class_name": "TunnelSession"
+      }
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "runpublic-production",
+      "database_id": "671dbb9b-ec50-4d6f-920e-8206e06955f8",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["TunnelSession"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

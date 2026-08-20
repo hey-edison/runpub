@@ -1,0 +1,56 @@
+name: Bug report
+description: Report reproducible RunPublic behavior that appears incorrect.
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Never include RunPublic tokens, private URLs, webhook payload secrets, or personal data.
+  - type: input
+    id: version
+    attributes:
+      label: RunPublic version
+      description: Output from `runpublic version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - First-time setup
+        - CLI or project manifest
+        - HTTP or webhook forwarding
+        - WebSocket forwarding
+        - Hosted edge
+        - Self-hosted edge
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and reproduction
+      description: Include a minimal project or redacted logs when possible.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, framework, and network/VPN details.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials and sensitive request data.
+          required: true

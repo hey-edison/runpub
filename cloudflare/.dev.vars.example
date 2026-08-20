@@ -1,0 +1,2 @@
+RUNPUBLIC_ADMIN_SECRET=replace-with-a-random-local-development-secret
+RUNPUBLIC_DEV_MODE=true

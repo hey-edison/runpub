@@ -1,0 +1,68 @@
+{
+  "name": "runpublic",
+  "version": "0.2.0",
+  "description": "Project-aware public HTTPS URLs for local development services",
+  "type": "module",
+  "main": "./src/tunnel-client.js",
+  "exports": {
+    ".": "./src/tunnel-client.js",
+    "./edge": "./src/edge-server.js",
+    "./naming": "./src/naming.js"
+  },
+  "bin": {
+    "runpublic": "./bin/runpublic.js",
+    "runpublic-edge": "./bin/runpublic-edge.js",
+    "devpublic": "./bin/devpublic.js",
+    "devpublic-edge": "./bin/devpublic-edge.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "runpublic.schema.json",
+    "devpublic.schema.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start:edge": "node ./bin/runpublic-edge.js",
+    "test": "node --test",
+    "test:e2e": "node --test test/e2e.test.js",
+    "check": "node --check cloudflare/src/worker.js && node --check src/tunnel-client.js && node --check src/edge-server.js && npm test && npm pack --dry-run",
+    "cloudflare:dev": "wrangler dev --config cloudflare/wrangler.jsonc",
+    "cloudflare:deploy": "wrangler deploy --config cloudflare/wrangler.jsonc",
+    "cloudflare:migrate:local": "wrangler d1 migrations apply runpublic-production --local --config cloudflare/wrangler.jsonc",
+    "cloudflare:migrate": "wrangler d1 migrations apply runpublic-production --remote --config cloudflare/wrangler.jsonc",
+    "cloudflare:admin": "node cloudflare/scripts/admin.mjs"
+  },
+  "keywords": [
+    "tunnel",
+    "localhost",
+    "webhook",
+    "https",
+    "frontend",
+    "backend",
+    "developer-tools"
+  ],
+  "author": "Keshav Patil",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hey-edison/runpublic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hey-edison/runpublic/issues"
+  },
+  "homepage": "https://github.com/hey-edison/runpublic#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.125.0"
+  }
+}

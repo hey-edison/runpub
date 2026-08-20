@@ -1,0 +1,7 @@
+# Caddy is only the HTTPS reverse proxy here. It does not request a wildcard
+# certificate automatically: mount an operator-provisioned certificate and key
+# and set RUNPUBLIC_TLS_CERT_FILE / RUNPUBLIC_TLS_KEY_FILE.
+https://*.{$RUNPUBLIC_DOMAIN} {
+	tls {$RUNPUBLIC_TLS_CERT_FILE} {$RUNPUBLIC_TLS_KEY_FILE}
+	reverse_proxy edge:8080
+}

@@ -1,0 +1,10 @@
+node_modules/
+.env
+.DS_Store
+coverage/
+dist/
+deploy/certs/
+cloudflare/.wrangler/
+cloudflare/.dev.vars
+.wrangler/
+*.log

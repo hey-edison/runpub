@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, readFile, stat } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+import {
+  createProjectConfig,
+  loadAuthConfig,
+  loadProjectConfig,
+  saveAuthConfig,
+  validateProjectConfig
+} from "../src/config.js";
+
+test("stores authentication outside the project with private permissions", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "devpublic-auth-"));
+  const env = { DEVPUBLIC_HOME: directory };
+
+  const filePath = await saveAuthConfig(
+    {
+      server: "https://edge.example.com/",
+      account: "keshavmac",
+      token: "a-secret-that-must-not-be-printed"
+    },
+    env
+  );
+
+  const auth = await loadAuthConfig(env);
+  assert.deepEqual(
+    { server: auth.server, account: auth.account, token: auth.token },
+    {
+      server: "https://edge.example.com",
+      account: "keshavmac",
+      token: "a-secret-that-must-not-be-printed"
+    }
+  );
+  assert.equal((await stat(filePath)).mode & 0o777, 0o600);
+});
+
+test("environment variables override stored authentication", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "devpublic-auth-"));
+  await saveAuthConfig(
+    { server: "https://old.example.com", account: "old-user", token: "old-token" },
+    { DEVPUBLIC_HOME: directory }
+  );
+
+  const auth = await loadAuthConfig({
+    DEVPUBLIC_HOME: directory,
+    DEVPUBLIC_SERVER: "https://new.example.com",
+    DEVPUBLIC_ACCOUNT: "new-user",
+    DEVPUBLIC_TOKEN: "new-token"
+  });
+  assert.equal(auth.server, "https://new.example.com");
+  assert.equal(auth.account, "new-user");
+  assert.equal(auth.token, "new-token");
+});
+
+test("finds and validates project configuration from a nested directory", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "devpublic-project-"));
+  await createProjectConfig("fullstack-demo", directory);
+  const configPath = path.join(directory, "runpublic.json");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.services.frontend = {
+    command: "npm run dev",
+    port: 5173
+  };
+  await import("node:fs/promises").then(({ writeFile }) =>
+    writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`)
+  );
+  const nested = path.join(directory, "packages", "frontend");
+  await mkdir(nested, { recursive: true });
+
+  const loaded = await loadProjectConfig(nested);
+  assert.equal(loaded.path, configPath);
+  assert.deepEqual(loaded.config.services.frontend, {
+    command: "npm run dev",
+    port: 5173,
+    host: "127.0.0.1",
+    protocol: "http",
+    readyTimeoutMs: 15000
+  });
+});
+
+test("rejects unsafe project configuration", () => {
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        project: "Not DNS Safe",
+        services: { frontend: { command: "npm run dev", port: 5173 } }
+      }),
+    /DNS-safe/
+  );
+  assert.throws(
+    () =>
+      validateProjectConfig({
+        project: "safe",
+        services: { database: { command: "postgres", port: 70000 } }
+      }),
+    /65535/
+  );
+});

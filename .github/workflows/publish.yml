@@ -1,0 +1,30 @@
+name: Publish npm package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Publish when this version is new
+        run: |
+          PACKAGE_VERSION=$(node --print "require('./package.json').version")
+          if npm view "runpublic@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "runpublic@${PACKAGE_VERSION} is already published"
+          else
+            npm publish --access public
+          fi

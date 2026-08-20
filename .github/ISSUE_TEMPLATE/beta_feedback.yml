@@ -1,0 +1,42 @@
+name: Beta feedback
+description: Tell us where your first RunPublic session felt smooth or confusing.
+title: "[Beta feedback]: "
+labels: [feedback, first-run]
+body:
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Did you get a working public URL?
+      options:
+        - Yes, frontend
+        - Yes, backend or webhook
+        - Yes, both
+        - No
+    validations:
+      required: true
+  - type: input
+    id: time
+    attributes:
+      label: Rough time to first working URL
+      placeholder: e.g. 4 minutes
+  - type: textarea
+    id: hesitation
+    attributes:
+      label: Where did you hesitate or get stuck?
+    validations:
+      required: true
+  - type: textarea
+    id: delight
+    attributes:
+      label: What felt surprisingly useful?
+  - type: textarea
+    id: next
+    attributes:
+      label: What would make you use it again next week?
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed tokens, private URLs, and sensitive payloads.
+          required: true
