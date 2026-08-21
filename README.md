@@ -14,11 +14,12 @@ URL.**
 
 RunPub is a project-aware development tunnel. It detects and starts local
 services, gives each one a predictable URL, connects frontends to backends, and
-keeps framework hot reload working through the tunnel.
+keeps framework hot reload working through the tunnel. For example, using
+illustrative project and account names:
 
 ```text
-https://fullstack-demo-frontend-keshavmac.runpublic.dev
-https://fullstack-demo-backend-keshavmac.runpublic.dev
+https://sample-app-frontend-alice.runpublic.dev
+https://sample-app-backend-alice.runpublic.dev
 ```
 
 It is built for development previews and testing. It is not a production app
@@ -84,13 +85,13 @@ the answer in `runpub.json`; later runs reuse it and print the same URLs.
 RunPub found several development services:
 
   1. backend — FastAPI backend — python3 -m uvicorn ... — port 8000
-  2. careers-web — Node.js frontend — npm run dev — port 3000
-  3. edison-web — Node.js frontend — npm run dev — port 3000
+  2. dashboard — Node.js frontend — npm run dev — port 3000
+  3. marketing-site — Node.js frontend — npm run dev — port 3000
 
-Select the services to expose (comma-separated numbers, or "all"): 1,3
-Selected 2 services for ai-native-ats.
+Select the services to expose (comma-separated numbers, or "all"): 1,2
+Selected 2 services for sample-app.
 Detected backend: FastAPI backend in backend (port 8000)
-Detected frontend: Node.js frontend in edison-web (port 3000)
+Detected frontend: Node.js frontend in dashboard (port 3000)
 ```
 
 Interactive onboarding asks once whether supported AI coding agents should use
@@ -169,9 +170,9 @@ selected again by the same name or folder.
 Coding agents and CI can make the first-run choice without a prompt:
 
 ```bash
-runpub --services edison-web,backend --json
+runpub --services dashboard,backend --json
 runpub --yes --json  # deliberately select every detected service
-runpub --services edison-web,backend --agents --json
+runpub --services dashboard,backend --agents --json
 ```
 
 Use `--no-agents` to explicitly skip agent integration for a command. A new
@@ -189,7 +190,7 @@ runpub expose 3000 --project demo --service frontend
 Expose an already-running backend directly:
 
 ```bash
-runpub expose 8000 --project edison-sourcing --service backend
+runpub expose 8000 --project sample-app --service backend
 ```
 
 Or commit a `runpub.json` so one command starts and exposes the whole project:
@@ -197,12 +198,12 @@ Or commit a `runpub.json` so one command starts and exposes the whole project:
 ```json
 {
   "$schema": "./node_modules/runpub/runpub.schema.json",
-  "project": "ai-native-ats",
+  "project": "sample-app",
   "services": {
     "frontend": {
       "command": "npm run dev",
       "port": 3000,
-      "cwd": "edison-web",
+      "cwd": "dashboard",
       "env": {
         "NEXT_PUBLIC_API_BASE": "${RUNPUB_BACKEND_URL}/api/v1"
       }
@@ -394,7 +395,7 @@ Install dependencies and start the Node edge:
 ```bash
 npm install
 RUNPUB_DOMAIN=runpub.test \
-RUNPUB_TOKENS_JSON='{"keshavmac":"local-secret"}' \
+RUNPUB_TOKENS_JSON='{"alice":"local-secret"}' \
 RUNPUB_PUBLIC_SCHEME=http \
 RUNPUB_PUBLIC_PORT=8080 \
 npm run start:edge
@@ -405,7 +406,7 @@ In another terminal:
 ```bash
 runpub login \
   --server http://localhost:8080 \
-  --account keshavmac \
+  --account alice \
   --token local-secret
 cd examples/fullstack
 runpub
@@ -415,7 +416,7 @@ The `.test` domain does not resolve publicly. Exercise the route with an
 explicit host header:
 
 ```bash
-curl -H 'Host: fullstack-demo-backend-keshavmac.runpub.test' \
+curl -H 'Host: fullstack-demo-backend-alice.runpub.test' \
   http://127.0.0.1:8080/api/hello
 ```
 
