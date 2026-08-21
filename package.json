@@ -10,12 +10,12 @@
     "./naming": "./src/naming.js"
   },
   "bin": {
-    "runpub": "./bin/runpub.js",
-    "runpub-edge": "./bin/runpub-edge.js",
-    "runpublic": "./bin/runpublic.js",
-    "runpublic-edge": "./bin/runpublic-edge.js",
-    "devpublic": "./bin/devpublic.js",
-    "devpublic-edge": "./bin/devpublic-edge.js"
+    "runpub": "bin/runpub.js",
+    "runpub-edge": "bin/runpub-edge.js",
+    "runpublic": "bin/runpublic.js",
+    "runpublic-edge": "bin/runpublic-edge.js",
+    "devpublic": "bin/devpublic.js",
+    "devpublic-edge": "bin/devpublic-edge.js"
   },
   "files": [
     "bin",
