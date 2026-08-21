@@ -37,7 +37,7 @@ Usage:
   runpub <service>               Start and expose one configured service
   runpub all                     Start and expose every configured service
   runpub <port> [options]        Expose an already-running local port
-  runpub login [--server <url>] [--account <namespace>] [--no-browser]
+  runpub login [--server <url>] [--account <namespace>] [--no-browser] [--agents|--no-agents]
   runpub login [--server <url>] --account <name> (--token <token> | --token-file <path>)
   runpub whoami [--json]
   runpub init [--project <name>] [--json]
@@ -53,8 +53,8 @@ Usage:
 First-run setup options:
   --services <folders>   Select detected folders, comma-separated
   --yes                  Select every detected service without prompting
-  --agents               Install AI-agent instructions without prompting
-  --no-agents            Do not install AI-agent instructions
+  --agents               Enable global AI-agent integration without prompting
+  --no-agents            Skip AI-agent integration for this command
 
 Expose options:
   --host <host>          Local host (default: 127.0.0.1)
@@ -666,7 +666,7 @@ export async function promptForAgentInstructions(
   try {
     while (true) {
       const answer = await readline.question(
-        'Make RunPub the default for AI coding agents when they start development servers? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
+        'Enable RunPub globally for AI coding agents when they start development servers? Adds managed Codex/ChatGPT, Claude Code, and Antigravity instructions once; Cursor gets a rule in each RunPub project. [y/N] ',
       );
       const normalized = answer.trim().toLowerCase();
       if (normalized === 'y' || normalized === 'yes') return true;
@@ -678,17 +678,49 @@ export async function promptForAgentInstructions(
   }
 }
 
-async function configureAgentInstructions(flags, reporter, projectDirectory, { prompt = true } = {}) {
+async function configureAgentInstructions(
+  flags,
+  reporter,
+  projectDirectory,
+  { globalOnly = false } = {},
+) {
   if (flags.agents && flags['no-agents']) {
     throw new Error('--agents and --no-agents cannot be used together');
   }
+  if (flags['no-agents']) return [];
+
+  const globalStatus = await agentInstructionStatus({
+    projectDirectory,
+    scope: 'global',
+  });
+  const globalsInstalled = globalStatus.length > 0 &&
+    globalStatus.every((target) => target.installed);
+
+  if (globalsInstalled && !flags.agents) {
+    if (globalOnly) return [];
+    const projectStatus = await agentInstructionStatus({
+      projectDirectory,
+      scope: 'project',
+    });
+    if (projectStatus.every((target) => target.installed)) return [];
+    const projectResults = await installAgentInstructions({
+      projectDirectory,
+      scope: 'project',
+    });
+    for (const result of projectResults) reporter.event('agent-instructions', result);
+    return projectResults;
+  }
+
   let enabled = Boolean(flags.agents);
-  if (!flags.agents && !flags['no-agents']) {
-    if (!prompt || flags.json || !process.stdin.isTTY || !process.stdout.isTTY) return [];
+  if (!flags.agents) {
+    if (flags.json || !process.stdin.isTTY || !process.stdout.isTTY) return [];
     enabled = await promptForAgentInstructions();
   }
   if (!enabled) return [];
-  const results = await installAgentInstructions({ projectDirectory });
+  const results = await installAgentInstructions({
+    projectDirectory,
+    scope: globalOnly ? 'global' : 'all',
+  });
   for (const result of results) reporter.event('agent-instructions', result);
   return results;
 }
@@ -765,9 +797,6 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
       command: service.command,
     });
   }
-  await configureAgentInstructions(flags, reporter, path.dirname(path.resolve(filePath)), {
-    prompt: !existing,
-  });
   return filePath;
 }
 
@@ -977,6 +1006,8 @@ export async function runCli(argv = process.argv.slice(2)) {
         'token-file',
         'skip-verify',
         'no-browser',
+        'agents',
+        'no-agents',
         'json',
       ]);
       if (positionals.length > 0) throw new Error('login does not accept positional arguments');
@@ -1015,6 +1046,9 @@ export async function runCli(argv = process.argv.slice(2)) {
       }
       const filePath = await saveAuthConfig({ server, account, token });
       reporter.event('login', { server, account, path: filePath });
+      await configureAgentInstructions(flags, reporter, process.cwd(), {
+        globalOnly: true,
+      });
       return 0;
     }
 
@@ -1041,7 +1075,12 @@ export async function runCli(argv = process.argv.slice(2)) {
         'json',
       ]);
       if (positionals.length > 0) throw new Error('init does not accept positional arguments');
-      await initializeProject(flags, reporter, { allowEmpty: true });
+      const filePath = await initializeProject(flags, reporter, { allowEmpty: true });
+      await configureAgentInstructions(
+        flags,
+        reporter,
+        path.dirname(path.resolve(filePath)),
+      );
       return 0;
     }
     if (command === 'agents') {
@@ -1053,7 +1092,8 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
     if (command === 'run') {
       assertAllowedFlags(flags, ['project', 'services', 'yes', 'agents', 'no-agents', 'json']);
-      await ensureProjectConfig(reporter, flags);
+      const loaded = await ensureProjectConfig(reporter, flags);
+      await configureAgentInstructions(flags, reporter, loaded.directory);
       return await runCommand(positionals, { ...(flags.json ? { json: true } : {}) }, reporter);
     }
     if (command === '__port__') {

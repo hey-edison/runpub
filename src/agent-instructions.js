@@ -95,6 +95,17 @@ export async function agentInstructionTargets({
   ];
 }
 
+async function operationTargets(options) {
+  const scope = options.scope ?? 'all';
+  if (!['all', 'global', 'project'].includes(scope)) {
+    throw new Error(`unknown agent instruction scope "${scope}"`);
+  }
+  const targets = await agentInstructionTargets(options);
+  return scope === 'all'
+    ? targets
+    : targets.filter((target) => target.scope === scope);
+}
+
 async function readOptional(filePath) {
   try {
     return await readFile(filePath, 'utf8');
@@ -177,7 +188,7 @@ async function atomicWrite(filePath, contents, existing) {
 }
 
 export async function installAgentInstructions(options = {}) {
-  const targets = await agentInstructionTargets(options);
+  const targets = await operationTargets(options);
   const prepared = await Promise.all(targets.map(async (target) => {
     const targetExisting = await readOptional(target.path);
     let existing = targetExisting;
@@ -209,7 +220,7 @@ export async function installAgentInstructions(options = {}) {
 }
 
 export async function agentInstructionStatus(options = {}) {
-  const targets = await agentInstructionTargets(options);
+  const targets = await operationTargets(options);
   return await Promise.all(targets.map(async (target) => {
     let contents = await readOptional(target.path);
     let inspectedPath = target.path;
@@ -229,7 +240,7 @@ export async function agentInstructionStatus(options = {}) {
 }
 
 export async function removeAgentInstructions(options = {}) {
-  const targets = await agentInstructionTargets(options);
+  const targets = await operationTargets(options);
   const results = [];
   for (const target of targets) {
     let targetPath = target.path;

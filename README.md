@@ -93,9 +93,11 @@ Detected backend: FastAPI backend in backend (port 8000)
 Detected frontend: Node.js frontend in edison-web (port 3000)
 ```
 
-Interactive setup also asks whether supported AI coding agents should use
-RunPub by default when they start browser-accessible development servers. This
-is opt-in and defaults to no.
+Interactive onboarding asks once whether supported AI coding agents should use
+RunPub by default when they start browser-accessible development servers. The
+question normally appears after `runpub login`, is opt-in, and defaults to no.
+If the global instructions already exist, future projects inherit that choice
+without asking again; RunPub adds only Cursor's project rule where needed.
 
 ## What does RunPub automate?
 
@@ -172,9 +174,10 @@ runpub --yes --json  # deliberately select every detected service
 runpub --services edison-web,backend --agents --json
 ```
 
-Use `--no-agents` to explicitly skip agent integration in automated setup.
-Non-interactive and `--json` setup never changes agent instructions unless
-`--agents` is present.
+Use `--no-agents` to explicitly skip agent integration for a command. A new
+non-interactive project never creates global instructions unless `--agents` is
+present. When global integration is already installed, RunPub automatically
+adds the project's Cursor rule even in `--json` mode.
 
 The explicit forms below remain supported for scripts:
 
@@ -249,8 +252,8 @@ and edit the generated file once.
 
 ## AI coding agents
 
-When the developer opts in, RunPub adds a small managed instruction block to
-the supported global instruction files:
+When the developer opts in once, RunPub adds a small managed instruction block
+to the supported global instruction files:
 
 ```text
 ~/.codex/AGENTS.md       Codex and the ChatGPT coding agent
@@ -259,9 +262,10 @@ the supported global instruction files:
 ```
 
 If Codex already uses `AGENTS.override.md`, RunPub updates that active file
-instead. Cursor stores its global User Rules in application settings, so RunPub
-creates the supported project rule `.cursor/rules/runpub.mdc` in each opted-in
-project.
+instead. On later projects, RunPub detects the global managed blocks and does
+not ask again. Cursor stores its global User Rules in application settings, so
+RunPub creates the supported project rule `.cursor/rules/runpub.mdc` for each
+RunPub project after the global opt-in.
 
 These instructions make RunPub the default launcher for interactive development
 servers, frontend previews, APIs, and webhook handlers. Agents check status
@@ -301,9 +305,10 @@ on the phone. The devices do not need to share a local network.
 
 ### Can Codex or Claude use RunPub automatically?
 
-Yes. Choose the AI-agent option during first-run setup or run `runpub agents
-install`. Supported agents are instructed to use RunPub for interactive local
-frontends, APIs, and webhooks, keep it running, and return the public URL.
+Yes. Choose the AI-agent option during initial login/onboarding or run `runpub
+agents install`. The global choice is reused across projects. Supported agents
+are instructed to use RunPub for interactive local frontends, APIs, and
+webhooks, keep it running, and return the public URL.
 
 ### Does RunPub replace repeated ngrok setup?
 

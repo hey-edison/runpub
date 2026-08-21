@@ -15,6 +15,7 @@ import {
   promptForServiceSelection,
   resolveServiceSelection,
 } from '../src/cli.js';
+import { installAgentInstructions } from '../src/agent-instructions.js';
 import { saveProcessState } from '../src/process-state.js';
 
 const execFileAsync = promisify(execFile);
@@ -23,9 +24,15 @@ const cli = path.join(repository, 'bin', 'runpub.js');
 const legacyCli = path.join(repository, 'bin', 'runpublic.js');
 
 async function invoke(args, cwd) {
+  const home = path.join(cwd, '.home');
   return await execFileAsync(process.execPath, [cli, ...args], {
     cwd,
-    env: { ...process.env, RUNPUB_HOME: path.join(cwd, '.auth') },
+    env: {
+      ...process.env,
+      HOME: home,
+      CODEX_HOME: path.join(home, '.codex'),
+      RUNPUB_HOME: path.join(cwd, '.auth'),
+    },
   });
 }
 
@@ -286,7 +293,7 @@ test('interactive setup renders choices and returns the selected services', asyn
   assert.match(rendered, /comma-separated numbers/);
 });
 
-test('AI-agent setup prompt is explicit and defaults to disabled', async () => {
+test('global AI-agent onboarding prompt is explicit and defaults to disabled', async () => {
   for (const [answer, expected] of [['yes\n', true], ['\n', false]]) {
     const input = new PassThrough();
     const output = new PassThrough();
@@ -295,9 +302,78 @@ test('AI-agent setup prompt is explicit and defaults to disabled', async () => {
     input.end(answer);
 
     assert.equal(await promptForAgentInstructions({ input, output }), expected);
-    assert.match(rendered, /Make RunPub the default for AI coding agents/);
+    assert.match(rendered, /Enable RunPub globally for AI coding agents/);
     assert.match(rendered, /\[y\/N\]/);
   }
+});
+
+test('login --agents installs global instructions without writing a project rule', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-login-agents-'));
+  const home = path.join(directory, 'home');
+  const env = {
+    ...process.env,
+    HOME: home,
+    CODEX_HOME: path.join(home, '.codex'),
+    RUNPUB_HOME: path.join(directory, '.auth'),
+  };
+  const { stdout } = await execFileAsync(process.execPath, [
+    cli,
+    'login',
+    '--server',
+    'http://localhost:9999',
+    '--account',
+    'agent-user',
+    '--token',
+    'test-token',
+    '--skip-verify',
+    '--agents',
+    '--json',
+  ], { cwd: directory, env });
+  const events = stdout.trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(
+    events.filter((event) => event.type === 'agent-instructions').map((event) => event.id),
+    ['codex', 'claude', 'antigravity'],
+  );
+  assert.match(await readFile(path.join(home, '.codex', 'AGENTS.md'), 'utf8'), /RunPub/);
+  await assert.rejects(
+    readFile(path.join(directory, '.cursor', 'rules', 'runpub.mdc'), 'utf8'),
+    (error) => error.code === 'ENOENT',
+  );
+});
+
+test('an existing global opt-in automatically adds only the new project Cursor rule', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-global-agents-'));
+  const home = path.join(directory, 'home');
+  const env = {
+    ...process.env,
+    HOME: home,
+    CODEX_HOME: path.join(home, '.codex'),
+    RUNPUB_HOME: path.join(directory, '.auth'),
+  };
+  await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
+    name: 'global-agent-demo',
+    scripts: { dev: 'vite' },
+    devDependencies: { vite: '^7.0.0' },
+  })}\n`);
+  await installAgentInstructions({
+    projectDirectory: directory,
+    env,
+    scope: 'global',
+  });
+
+  const { stdout } = await execFileAsync(process.execPath, [cli, 'init', '--json'], {
+    cwd: directory,
+    env,
+  });
+  const events = stdout.trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(
+    events.filter((event) => event.type === 'agent-instructions').map((event) => event.id),
+    ['cursor'],
+  );
+  assert.match(
+    await readFile(path.join(directory, '.cursor', 'rules', 'runpub.mdc'), 'utf8'),
+    /alwaysApply: true/,
+  );
 });
 
 test('init --agents installs agent instructions non-interactively', async () => {
