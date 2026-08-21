@@ -284,27 +284,38 @@ export async function loadProjectConfig(startDirectory = process.cwd()) {
   };
 }
 
-export async function createProjectConfig(project, directory = process.cwd(), services = {}) {
+export async function createProjectConfig(
+  project,
+  directory = process.cwd(),
+  services = {},
+  { overwrite = false } = {},
+) {
   const validatedProject = validateName(project, 'project');
   const validated = validateProjectConfig(
     { project: validatedProject, services },
     { requireServices: false },
   );
   const filePath = path.join(path.resolve(directory), PROJECT_CONFIG_NAME);
-  const handle = await open(filePath, 'wx', 0o644).catch((error) => {
-    if (error?.code === 'EEXIST') {
-      throw new Error(`${filePath} already exists`);
-    }
-    throw error;
-  });
-
+  const targetPath = overwrite
+    ? `${filePath}.${process.pid}.${Date.now()}.tmp`
+    : filePath;
+  let handle;
   try {
+    handle = await open(targetPath, 'wx', 0o644);
     await handle.writeFile(
       `${JSON.stringify({ project: validated.project, services }, null, 2)}\n`,
       'utf8',
     );
-  } finally {
     await handle.close();
+    handle = undefined;
+    if (overwrite) await rename(targetPath, filePath);
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    if (overwrite || error?.code !== 'EEXIST') await unlink(targetPath).catch(() => {});
+    if (!overwrite && error?.code === 'EEXIST') {
+      throw new Error(`${filePath} already exists`);
+    }
+    throw error;
   }
 
   return filePath;

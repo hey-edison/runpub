@@ -147,3 +147,17 @@ test("rejects unsafe project configuration", () => {
     /65535/
   );
 });
+
+test("explicit overwrite atomically replaces an existing project configuration", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runpublic-overwrite-"));
+  await createProjectConfig("first-project", directory, {
+    frontend: { command: "npm run dev", port: 3000 }
+  });
+  await createProjectConfig("second-project", directory, {
+    backend: { command: "python3 -m uvicorn app:app", port: 8000 }
+  }, { overwrite: true });
+
+  const saved = JSON.parse(await readFile(path.join(directory, "runpublic.json"), "utf8"));
+  assert.equal(saved.project, "second-project");
+  assert.deepEqual(Object.keys(saved.services), ["backend"]);
+});

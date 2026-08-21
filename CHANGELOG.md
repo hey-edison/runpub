@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 - 2026-08-21
+
+- Discover development services in unconventional top-level application
+  folders as well as conventional monorepo layouts.
+- Add an interactive first-run selector when multiple plausible services are
+  detected, then assign clean frontend/backend aliases from the selection.
+- Add `--services <folders>` and `--yes` for coding agents and CI environments
+  that cannot answer an interactive prompt.
+
 ## 0.3.0 - 2026-08-21
 
 - Make bare `runpublic` auto-detect, configure, start, and expose a project.

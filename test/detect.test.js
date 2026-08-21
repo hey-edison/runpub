@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { detectProject, inferProjectName } from '../src/detect.js';
+import { detectProject, inferProjectName, selectDetectedServices } from '../src/detect.js';
 
 async function writeJson(filePath, value) {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
@@ -71,6 +71,7 @@ test('detects package-manager workspaces and disambiguates repeated roles', asyn
   }
 
   const detected = await detectProject(directory);
+  assert.equal(detected.ambiguous, true);
   assert.equal(Object.keys(detected.services).length, 2);
   assert.deepEqual(detected.services['admin-frontend'], {
     command: 'npm run dev',
@@ -82,6 +83,37 @@ test('detects package-manager workspaces and disambiguates repeated roles', asyn
     port: 5174,
     cwd: 'apps/dashboard',
   });
+});
+
+test('discovers unconventional top-level apps and finalizes a user selection', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-choice-'));
+  for (const name of ['careers-web', 'edison-web']) {
+    const serviceDirectory = path.join(directory, name);
+    await mkdir(serviceDirectory);
+    await writeJson(path.join(serviceDirectory, 'package.json'), {
+      name,
+      scripts: { dev: 'next dev' },
+      dependencies: { next: '^16.0.0', react: '^19.0.0' },
+    });
+  }
+  const backend = path.join(directory, 'backend');
+  await mkdir(path.join(backend, 'app'), { recursive: true });
+  await writeFile(path.join(backend, 'requirements.txt'), 'fastapi\nuvicorn\n');
+  await writeFile(path.join(backend, 'app', 'main.py'), 'app = None\n');
+
+  const detected = await detectProject(directory, 'ai-native-ats');
+  assert.equal(detected.ambiguous, true);
+  assert.deepEqual(
+    detected.candidates.map((candidate) => candidate.cwd).sort(),
+    ['backend', 'careers-web', 'edison-web'],
+  );
+  const selectedIds = detected.candidates
+    .filter((candidate) => ['backend', 'edison-web'].includes(candidate.cwd))
+    .map((candidate) => candidate.id);
+  const selected = selectDetectedServices(detected, selectedIds);
+  assert.deepEqual(Object.keys(selected.services).sort(), ['backend', 'frontend']);
+  assert.equal(selected.services.frontend.cwd, 'edison-web');
+  assert.equal(selected.services.backend.cwd, 'backend');
 });
 
 test('infers a DNS-safe project name from the directory', async () => {

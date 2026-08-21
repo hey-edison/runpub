@@ -276,6 +276,17 @@ async function conventionalDirectories(rootDirectory) {
   return directories;
 }
 
+async function topLevelDirectories(rootDirectory) {
+  const entries = await readdir(rootDirectory, { withFileTypes: true });
+  return entries
+    .filter((entry) =>
+      entry.isDirectory() &&
+      !entry.name.startsWith('.') &&
+      !IGNORED_DIRECTORIES.has(entry.name),
+    )
+    .map((entry) => path.join(rootDirectory, entry.name));
+}
+
 function uniqueServiceName(suggestedName, cwd, services, repeatedRole = false) {
   const base = sanitizeDnsLabel(suggestedName, 'app');
   const directoryName = sanitizeDnsLabel(path.basename(cwd), base);
@@ -294,35 +305,15 @@ export async function inferProjectName(directory = process.cwd()) {
   return sanitizeDnsLabel(packageName || path.basename(path.resolve(directory)), 'project').slice(0, 63).replace(/-+$/g, '');
 }
 
-export async function detectProject(directory = process.cwd(), projectOverride) {
-  const rootDirectory = path.resolve(directory);
-  const rootPackage = await readJson(path.join(rootDirectory, 'package.json'));
-  const workspaceDirs = await workspaceDirectories(rootDirectory, rootPackage);
-  const candidateDirectories = workspaceDirs.length > 0
-    ? workspaceDirs
-    : await conventionalDirectories(rootDirectory);
-  const hasChildCandidates = candidateDirectories.length > 0;
-  if (!hasChildCandidates || !rootPackage?.workspaces) candidateDirectories.unshift(rootDirectory);
-
-  const seen = new Set();
-  const detected = [];
-  for (const candidate of candidateDirectories) {
-    const normalized = path.resolve(candidate);
-    if (seen.has(normalized) || IGNORED_DIRECTORIES.has(path.basename(normalized))) continue;
-    seen.add(normalized);
-    const nodeServices = await detectNodeServices(normalized, rootDirectory);
-    if (nodeServices.length > 0) detected.push(...nodeServices);
-    else detected.push(...await detectPythonServices(normalized, rootDirectory));
-  }
-
+function finalizeCandidates(project, candidates) {
   const services = {};
   const detections = [];
   const roleCounts = new Map();
-  for (const candidate of detected) {
+  for (const candidate of candidates) {
     roleCounts.set(candidate.suggestedName, (roleCounts.get(candidate.suggestedName) ?? 0) + 1);
   }
   const usedPorts = new Set();
-  for (const candidate of detected) {
+  for (const candidate of candidates) {
     const name = uniqueServiceName(
       candidate.suggestedName,
       candidate.cwd,
@@ -343,10 +334,56 @@ export async function detectProject(directory = process.cwd(), projectOverride) 
     };
     detections.push({ name, ...candidate, command, port });
   }
+  return { project, services, detections, candidates };
+}
 
+export function selectDetectedServices(detection, candidateIds) {
+  const selected = new Set(candidateIds);
+  const candidates = detection.candidates.filter((candidate) => selected.has(candidate.id));
+  if (candidates.length === 0) throw new Error('select at least one detected service');
   return {
-    project: sanitizeDnsLabel(projectOverride || await inferProjectName(rootDirectory), 'project').slice(0, 63).replace(/-+$/g, ''),
-    services,
-    detections,
+    ...finalizeCandidates(detection.project, candidates),
+    ambiguous: false,
+  };
+}
+
+export async function detectProject(directory = process.cwd(), projectOverride) {
+  const rootDirectory = path.resolve(directory);
+  const rootPackage = await readJson(path.join(rootDirectory, 'package.json'));
+  const workspaceDirs = await workspaceDirectories(rootDirectory, rootPackage);
+  const candidateDirectories = workspaceDirs.length > 0
+    ? workspaceDirs
+    : [
+        ...await conventionalDirectories(rootDirectory),
+        ...await topLevelDirectories(rootDirectory),
+      ];
+  candidateDirectories.unshift(rootDirectory);
+
+  const seen = new Set();
+  const detected = [];
+  for (const candidate of candidateDirectories) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized) || IGNORED_DIRECTORIES.has(path.basename(normalized))) continue;
+    seen.add(normalized);
+    const nodeServices = await detectNodeServices(normalized, rootDirectory);
+    if (nodeServices.length > 0) detected.push(...nodeServices);
+    else detected.push(...await detectPythonServices(normalized, rootDirectory));
+  }
+
+  const roleCounts = new Map();
+  for (const candidate of detected) {
+    roleCounts.set(candidate.suggestedName, (roleCounts.get(candidate.suggestedName) ?? 0) + 1);
+  }
+  const project = sanitizeDnsLabel(projectOverride || await inferProjectName(rootDirectory), 'project').slice(0, 63).replace(/-+$/g, '');
+  const candidates = detected.map((candidate, index) => ({
+    id: String(index + 1),
+    ...candidate,
+  }));
+  const finalized = finalizeCandidates(project, candidates);
+  return {
+    ...finalized,
+    ambiguous:
+      candidates.length > 2 ||
+      [...roleCounts.values()].some((count) => count > 1),
   };
 }

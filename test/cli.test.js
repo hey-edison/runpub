@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { promisify } from 'node:util';
 
-import { buildServiceEnvironment } from '../src/cli.js';
+import {
+  buildServiceEnvironment,
+  promptForServiceSelection,
+  resolveServiceSelection,
+} from '../src/cli.js';
 import { saveProcessState } from '../src/process-state.js';
 
 const execFileAsync = promisify(execFile);
@@ -37,6 +42,63 @@ test('init auto-detects a project and writes a ready-to-run configuration', asyn
   assert.deepEqual(config, {
     project: 'mobile-demo',
     services: { frontend: { command: 'npm run dev', port: 5173 } },
+  });
+});
+
+test('non-interactive setup selects services by folder for an ambiguous repository', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-select-'));
+  for (const name of ['admin-web', 'customer-web']) {
+    const serviceDirectory = path.join(directory, name);
+    await mkdir(serviceDirectory);
+    await writeFile(path.join(serviceDirectory, 'package.json'), `${JSON.stringify({
+      name,
+      scripts: { dev: 'vite' },
+      devDependencies: { vite: '^7.0.0' },
+    })}\n`);
+  }
+  const result = await invoke(['init', '--services', 'customer-web', '--json'], directory);
+  const events = result.stdout.trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(events.map((event) => event.type), ['selected', 'init', 'detected']);
+  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  assert.deepEqual(config.services, {
+    frontend: { command: 'npm run dev', port: 5173, cwd: 'customer-web' },
+  });
+});
+
+test('non-interactive ambiguous setup fails with actionable choices', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-ambiguous-'));
+  for (const name of ['admin-web', 'customer-web']) {
+    const serviceDirectory = path.join(directory, name);
+    await mkdir(serviceDirectory);
+    await writeFile(path.join(serviceDirectory, 'package.json'), `${JSON.stringify({
+      name,
+      scripts: { dev: 'vite' },
+      devDependencies: { vite: '^7.0.0' },
+    })}\n`);
+  }
+  await assert.rejects(
+    invoke(['init', '--json'], directory),
+    (error) => /multiple services detected/.test(error.stderr) && /--services/.test(error.stderr),
+  );
+});
+
+test('setup re-runs detection and replaces an existing manifest', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-setup-'));
+  await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
+    name: 'fresh-project',
+    scripts: { dev: 'vite' },
+    devDependencies: { vite: '^7.0.0' },
+  })}\n`);
+  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+    project: 'old-project',
+    services: { old: { command: 'old-command', port: 9999 } },
+  })}\n`);
+
+  await invoke(['setup', '--json'], directory);
+  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  assert.equal(config.project, 'fresh-project');
+  assert.deepEqual(config.services, {
+    frontend: { command: 'npm run dev', port: 5173 },
   });
 });
 
@@ -128,4 +190,59 @@ test('injects stable cross-service URLs and expands configured environment', () 
     env.NEXT_PUBLIC_API_BASE,
     'https://ai-native-ats-backend-keshavmac.runpublic.dev/api/v1',
   );
+});
+
+test('service selection accepts numbers and folders but rejects ambiguous roles', () => {
+  const detection = {
+    candidates: [
+      { id: '1', cwd: 'admin-web', suggestedName: 'frontend' },
+      { id: '2', cwd: 'customer-web', suggestedName: 'frontend' },
+      { id: '3', cwd: 'backend', suggestedName: 'backend' },
+    ],
+  };
+  assert.deepEqual(resolveServiceSelection(detection, '2,backend'), ['2', '3']);
+  assert.throws(() => resolveServiceSelection(detection, 'frontend'), /ambiguous/);
+  assert.throws(() => resolveServiceSelection(detection, 'missing'), /does not match/);
+});
+
+test('interactive setup renders choices and returns the selected services', async () => {
+  const detection = {
+    candidates: [
+      {
+        id: '1',
+        cwd: 'careers-web',
+        suggestedName: 'frontend',
+        detectedAs: 'Node.js frontend',
+        command: 'npm run dev',
+        port: 3000,
+      },
+      {
+        id: '2',
+        cwd: 'edison-web',
+        suggestedName: 'frontend',
+        detectedAs: 'Node.js frontend',
+        command: 'npm run dev',
+        port: 3000,
+      },
+      {
+        id: '3',
+        cwd: 'backend',
+        suggestedName: 'backend',
+        detectedAs: 'FastAPI backend',
+        command: 'python3 -m uvicorn app.main:app',
+        port: 8000,
+      },
+    ],
+  };
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let rendered = '';
+  output.on('data', (chunk) => { rendered += chunk.toString(); });
+  input.end('2,3\n');
+
+  const selected = await promptForServiceSelection(detection, { input, output });
+  assert.deepEqual(selected, ['2', '3']);
+  assert.match(rendered, /RunPublic found several development services/);
+  assert.match(rendered, /2\. edison-web/);
+  assert.match(rendered, /comma-separated numbers/);
 });

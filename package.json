@@ -1,6 +1,6 @@
 {
   "name": "runpublic",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Project-aware public HTTPS URLs for local development services",
   "type": "module",
   "main": "./src/tunnel-client.js",

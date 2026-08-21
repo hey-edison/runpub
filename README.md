@@ -46,6 +46,33 @@ services, writes `runpublic.json`, starts them, and prints their stable HTTPS
 URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
 source code does not require restarting RunPublic.
 
+If a repository contains several possible applications, RunPublic asks once
+instead of guessing:
+
+```text
+RunPublic found several development services:
+
+  1. backend — FastAPI backend — python3 -m uvicorn ... — port 8000
+  2. careers-web — Node.js frontend — npm run dev — port 3000
+  3. edison-web — Node.js frontend — npm run dev — port 3000
+
+Select the services to expose (comma-separated numbers, or "all"): 1,3
+Selected 2 services for ai-native-ats.
+Detected backend: FastAPI backend in backend (port 8000)
+Detected frontend: Node.js frontend in edison-web (port 3000)
+```
+
+When one frontend and one backend are selected, their service names become the
+simple `frontend` and `backend` aliases. Selecting multiple services with the
+same role uses their folder names so every URL remains unambiguous.
+
+Coding agents and CI can make the same choice without an interactive prompt:
+
+```bash
+runpublic --services edison-web,backend --json
+runpublic --yes --json  # deliberately select every detected service
+```
+
 Natural shortcuts cover the common cases:
 
 ```bash
@@ -55,6 +82,7 @@ runpublic all            # start every configured service
 runpublic 3000           # expose an already-running port
 runpublic status         # show public, local-only, and stopped services
 runpublic stop           # stop this project's managed RunPublic sessions
+runpublic setup          # reopen detection and replace the saved selection
 ```
 
 The original explicit forms, such as `runpublic run frontend` and `runpublic
@@ -130,8 +158,9 @@ Auto-detection currently understands npm, pnpm, Yarn, and Bun projects using
 common development scripts; Vite, Next.js, React, Vue, Svelte, Angular, Nuxt,
 Astro, Gatsby, Express, NestJS, Fastify, Django, FastAPI, and Flask conventions;
 and conventional `frontend`/`backend`, `apps/*`, `packages/*`, and package
-manager workspace layouts. Unusual repositories can run `runpublic init` and
-edit the small generated file once.
+manager workspace layouts. It also scans top-level application folders and
+asks the user to resolve ambiguous choices. Unusual repositories can run
+`runpublic init` and edit the small generated file once.
 
 ## How it works
 

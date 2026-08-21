@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -13,7 +14,7 @@ import {
   validateName,
   validateServer,
 } from './config.js';
-import { detectProject, inferProjectName } from './detect.js';
+import { detectProject, inferProjectName, selectDetectedServices } from './detect.js';
 import { createServiceLabel } from './naming.js';
 import {
   listProcessStates,
@@ -36,12 +37,17 @@ Usage:
   runpublic login [--server <url>] --account <name> (--token <token> | --token-file <path>)
   runpublic whoami [--json]
   runpublic init [--project <name>] [--json]
+  runpublic setup                     Re-run detection and replace the manifest
   runpublic expose <port> --project <name> --service <name> [options]
   runpublic run [service] [--json]
   runpublic status [--json]
   runpublic stop
   runpublic help
   runpublic version
+
+First-run setup options:
+  --services <folders>   Select detected folders, comma-separated
+  --yes                  Select every detected service without prompting
 
 Expose options:
   --host <host>          Local host (default: 127.0.0.1)
@@ -77,7 +83,14 @@ function parseArguments(argv) {
     }
 
     const name = argument.slice(2);
-    if (name === 'json' || name === 'help' || name === 'skip-verify' || name === 'no-browser') {
+    if (
+      name === 'json' ||
+      name === 'help' ||
+      name === 'skip-verify' ||
+      name === 'no-browser' ||
+      name === 'yes' ||
+      name === 'force'
+    ) {
       flags[name] = true;
       continue;
     }
@@ -134,6 +147,8 @@ function createReporter(json) {
         process.stdout.write(
           `Detected ${details.service}: ${details.kind} in ${details.cwd} (port ${details.port})\n`,
         );
+      } else if (type === 'selected') {
+        process.stdout.write(`Selected ${details.count} service${details.count === 1 ? '' : 's'} for ${details.project}.\n`);
       } else if (type === 'whoami') {
         process.stdout.write(`${details.account} (${details.server})\n`);
       } else if (type === 'status') {
@@ -558,8 +573,94 @@ async function runCommand(positionals, flags, reporter) {
   }
 }
 
+function candidateDescription(candidate) {
+  return `${candidate.cwd} — ${candidate.detectedAs} — ${candidate.command} — port ${candidate.port}`;
+}
+
+export function resolveServiceSelection(detection, value) {
+  const tokens = String(value ?? '')
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) throw new Error('--services must list at least one folder or number');
+
+  const selected = new Set();
+  for (const token of tokens) {
+    const exact = detection.candidates.filter((candidate) =>
+      candidate.id === token ||
+      candidate.cwd === token ||
+      path.basename(candidate.cwd) === token,
+    );
+    const roleMatches = exact.length === 0
+      ? detection.candidates.filter((candidate) => candidate.suggestedName === token)
+      : [];
+    const matches = exact.length > 0 ? exact : roleMatches;
+    if (matches.length === 0) {
+      throw new Error(`--services entry "${token}" does not match a detected service`);
+    }
+    if (roleMatches.length > 1) {
+      throw new Error(`--services entry "${token}" is ambiguous; use a folder name or selection number`);
+    }
+    for (const candidate of matches) selected.add(candidate.id);
+  }
+  return [...selected];
+}
+
+export async function promptForServiceSelection(
+  detection,
+  { input = process.stdin, output = process.stdout } = {},
+) {
+  output.write('\nRunPublic found several development services:\n\n');
+  for (const candidate of detection.candidates) {
+    output.write(`  ${candidate.id}. ${candidateDescription(candidate)}\n`);
+  }
+  output.write('\n');
+
+  const readline = createInterface({ input, output });
+  try {
+    while (true) {
+      const answer = await readline.question(
+        'Select the services to expose (comma-separated numbers, or "all"): ',
+      );
+      try {
+        if (answer.trim().toLowerCase() === 'all') {
+          return detection.candidates.map((candidate) => candidate.id);
+        }
+        return resolveServiceSelection(detection, answer);
+      } catch (error) {
+        output.write(`${error.message}. Try again.\n`);
+      }
+    }
+  } finally {
+    readline.close();
+  }
+}
+
 async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
-  const detection = await detectProject(process.cwd(), flags.project);
+  let detection = await detectProject(process.cwd(), flags.project);
+  if (detection.ambiguous) {
+    let selectedIds;
+    if (flags.services) {
+      selectedIds = resolveServiceSelection(detection, flags.services);
+    } else if (flags.yes) {
+      selectedIds = detection.candidates.map((candidate) => candidate.id);
+    } else if (!flags.json && process.stdin.isTTY && process.stdout.isTTY) {
+      selectedIds = await promptForServiceSelection(detection);
+    } else {
+      const choices = detection.candidates
+        .map((candidate) => `${candidate.id}:${candidate.cwd}`)
+        .join(', ');
+      throw new Error(
+        `multiple services detected (${choices}); rerun with --services <folders> or --yes`,
+      );
+    }
+    detection = selectDetectedServices(detection, selectedIds);
+    reporter.event('selected', {
+      project: detection.project,
+      count: detection.detections.length,
+      services: detection.detections.map((service) => service.name),
+    });
+  }
   if (!allowEmpty && Object.keys(detection.services).length === 0) {
     throw new Error(
       'could not detect a development service; run "runpublic init --project <name>" and add its command and port to runpublic.json',
@@ -569,6 +670,7 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
     detection.project,
     process.cwd(),
     detection.services,
+    { overwrite: Boolean(flags.force) },
   );
   reporter.event('init', { project: detection.project, path: path.resolve(filePath) });
   for (const service of detection.detections) {
@@ -584,12 +686,12 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
   return filePath;
 }
 
-async function ensureProjectConfig(reporter) {
+async function ensureProjectConfig(reporter, flags = {}) {
   try {
     return await loadProjectConfig();
   } catch (error) {
     if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
-    await initializeProject({}, reporter);
+    await initializeProject(flags, reporter);
     return await loadProjectConfig();
   }
 }
@@ -708,7 +810,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (!command) {
       command = 'run';
       commandArguments = [];
-    } else if (command === '--json') {
+    } else if (command.startsWith('--')) {
       command = 'run';
       commandArguments = argv;
     }
@@ -722,6 +824,8 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'all') command = 'run';
+    const setupRequested = command === 'setup';
+    if (setupRequested) command = 'init';
     const builtInCommands = new Set(['login', 'whoami', 'init', 'expose', 'run', 'status', 'stop']);
     if (/^\d+$/.test(command)) {
       commandArguments = [command, ...commandArguments];
@@ -732,6 +836,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     const { positionals, flags } = parseArguments(commandArguments);
+    if (setupRequested) flags.force = true;
     const reporter = createReporter(Boolean(flags.json));
     if (flags.help) {
       process.stdout.write(HELP);
@@ -796,7 +901,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'init') {
-      assertAllowedFlags(flags, ['project', 'json']);
+      assertAllowedFlags(flags, ['project', 'services', 'yes', 'force', 'json']);
       if (positionals.length > 0) throw new Error('init does not accept positional arguments');
       await initializeProject(flags, reporter, { allowEmpty: true });
       return 0;
@@ -806,8 +911,8 @@ export async function runCli(argv = process.argv.slice(2)) {
       return await exposeCommand(positionals, flags, reporter);
     }
     if (command === 'run') {
-      await ensureProjectConfig(reporter);
-      return await runCommand(positionals, flags, reporter);
+      await ensureProjectConfig(reporter, flags);
+      return await runCommand(positionals, { ...(flags.json ? { json: true } : {}) }, reporter);
     }
     if (command === '__port__') {
       const [port, ...extraPositionals] = positionals;
