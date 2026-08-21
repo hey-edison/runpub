@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2 - 2026-08-21
+
+- Publish new package versions automatically from protected `main` using npm
+  Trusted Publishing and package provenance.
+- Create the matching GitHub release after a successful npm publication while
+  safely skipping versions that already exist.
+- Require pull requests and CI for repository changes, add code ownership, and
+  document the contribution and release workflow.
+
 ## 0.6.1 - 2026-08-21
 
 - Reframe the README around the original remote AI development problem: opening

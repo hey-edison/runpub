@@ -457,8 +457,10 @@ See [SECURITY.md](SECURITY.md) for private reporting and safe-testing rules,
 
 RunPub is MIT-licensed. Bugs, focused feature requests, and first-run beta
 feedback belong in the provided GitHub issue forms; broader questions and ideas
-belong in GitHub Discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[launch plan](docs/LAUNCH.md).
+belong in GitHub Discussions. Anyone can fork the repository and open a pull
+request—no prior permission is required. All changes go through protected
+`main`, required CI, and maintainer review. See
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [launch plan](docs/LAUNCH.md).
 
 ## Test and package
 
