@@ -55,6 +55,28 @@ test('installs supported global instructions and a project Cursor rule', async (
   assert.ok(status.every((target) => target.installed));
 });
 
+test('global onboarding and per-project Cursor installation can run independently', async () => {
+  const options = await fixture();
+  const globalResults = await installAgentInstructions({ ...options, scope: 'global' });
+  assert.deepEqual(globalResults.map((target) => target.id), [
+    'codex',
+    'claude',
+    'antigravity',
+  ]);
+  assert.ok((await agentInstructionStatus({ ...options, scope: 'global' })).every(
+    (target) => target.installed,
+  ));
+  assert.ok((await agentInstructionStatus({ ...options, scope: 'project' })).every(
+    (target) => !target.installed,
+  ));
+
+  const projectResults = await installAgentInstructions({ ...options, scope: 'project' });
+  assert.deepEqual(projectResults.map((target) => target.id), ['cursor']);
+  assert.ok((await agentInstructionStatus({ ...options, scope: 'project' })).every(
+    (target) => target.installed,
+  ));
+});
+
 test('installation is idempotent and updates only its managed block', async () => {
   const options = await fixture();
   await installAgentInstructions(options);

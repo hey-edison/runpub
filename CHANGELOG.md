@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.3 - 2026-08-21
+
+- Ask for AI coding-agent integration once during interactive RunPub login
+  instead of treating the same global choice as a per-project preference.
+- Detect installed global Codex, Claude Code, and Antigravity managed blocks so
+  later projects inherit the choice without another prompt.
+- Add Cursor's project rule automatically for each new RunPub project after the
+  global opt-in, while preserving `--agents`, `--no-agents`, and explicit agent
+  management commands.
+
 ## 0.6.2 - 2026-08-21
 
 - Publish new package versions automatically from protected `main` using npm
