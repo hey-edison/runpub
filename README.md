@@ -45,8 +45,8 @@ On the first run, the CLI detects common Node.js and Python development
 services, writes `runpublic.json`, starts them, and prints their stable HTTPS
 URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
 source code does not require restarting RunPublic. Interactive setup also asks
-whether AI coding agents should use RunPublic for explicitly requested mobile,
-remote, public-URL, and webhook testing. The default is no.
+whether AI coding agents should use RunPublic by default whenever they start an
+interactive development server. The default answer to this opt-in is no.
 
 If a repository contains several possible applications, RunPublic asks once
 instead of guessing:
@@ -115,11 +115,13 @@ instead. Cursor stores its supported global User Rules in the application
 settings rather than a Markdown file, so RunPublic creates the supported
 project rule `.cursor/rules/runpublic.mdc` in each opted-in project.
 
-The instructions tell agents to activate RunPublic only for an explicit public
-URL, mobile/remote test, webhook, or on-the-go development request. Agents
-check status first, reuse live tunnels, select one service or the complete
-stack, keep the process alive, return the URL, and avoid exposing databases,
-admin/debug ports, secret dashboards, or unauthenticated sensitive services.
+The instructions make RunPublic the default launcher for interactive
+development servers, frontend previews, APIs, and webhook handlers. Its public
+HTTPS URL is the primary browser/test URL on the same computer as well as on
+remote devices. Agents check status first, reuse live tunnels, select one
+service or the complete stack, keep the process alive, and return the URL.
+Unit tests, builds, linters, one-off scripts, databases, admin/debug ports, and
+processes that do not need a browser-accessible URL are explicitly excluded.
 
 The installer preserves all existing text and owns only content between
 `<!-- runpublic:managed:start -->` and `<!-- runpublic:managed:end -->`. It is

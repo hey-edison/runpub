@@ -41,7 +41,8 @@ test('installs supported global instructions and a project Cursor rule', async (
   assert.match(agents, /^# My existing instructions/m);
   assert.match(agents, new RegExp(MANAGED_START));
   assert.match(agents, /runpublic status --json/);
-  assert.match(agents, /Internet-accessible/);
+  assert.match(agents, /both local and remote testing/);
+  assert.match(agents, /Do not start RunPublic for unit tests/);
 
   const cursor = await readFile(
     path.join(options.projectDirectory, '.cursor', 'rules', 'runpublic.mdc'),
@@ -76,7 +77,7 @@ test('uses AGENTS.override.md when Codex global override already exists', async 
 
   const results = await installAgentInstructions(options);
   assert.equal(results.find((target) => target.id === 'codex').path, overridePath);
-  assert.match(await readFile(overridePath, 'utf8'), /RunPublic remote development/);
+  assert.match(await readFile(overridePath, 'utf8'), /RunPublic development servers/);
 });
 
 test('preserves instruction-file symlinks', async () => {

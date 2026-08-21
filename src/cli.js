@@ -657,7 +657,7 @@ export async function promptForAgentInstructions(
   try {
     while (true) {
       const answer = await readline.question(
-        'Enable RunPublic for AI coding agents? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
+        'Make RunPublic the default for AI coding agents when they start development servers? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
       );
       const normalized = answer.trim().toLowerCase();
       if (normalized === 'y' || normalized === 'yes') return true;

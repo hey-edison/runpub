@@ -2,8 +2,8 @@
 
 ## 0.5.0 - 2026-08-21
 
-- Add an explicit first-run opt-in for AI coding agents used in remote and
-  on-the-go development workflows.
+- Add an explicit first-run opt-in that makes RunPublic the default launcher
+  when AI coding agents start interactive development servers or previews.
 - Install idempotent, managed global instructions for Codex/ChatGPT coding
   agents, Claude Code, and Antigravity, plus a project-level Cursor rule.
 - Add `--agents` and `--no-agents` for non-interactive setup.

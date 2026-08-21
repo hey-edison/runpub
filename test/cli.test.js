@@ -287,7 +287,7 @@ test('AI-agent setup prompt is explicit and defaults to disabled', async () => {
     input.end(answer);
 
     assert.equal(await promptForAgentInstructions({ input, output }), expected);
-    assert.match(rendered, /Enable RunPublic for AI coding agents/);
+    assert.match(rendered, /Make RunPublic the default for AI coding agents/);
     assert.match(rendered, /\[y\/N\]/);
   }
 });
@@ -315,7 +315,7 @@ test('init --agents installs agent instructions non-interactively', async () => 
   assert.equal(events.filter((event) => event.type === 'agent-instructions').length, 4);
   assert.match(
     await readFile(path.join(home, '.codex', 'AGENTS.md'), 'utf8'),
-    /RunPublic remote development/,
+    /RunPublic development servers/,
   );
   assert.match(
     await readFile(path.join(directory, '.cursor', 'rules', 'runpublic.mdc'), 'utf8'),

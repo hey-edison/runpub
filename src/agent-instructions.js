@@ -18,18 +18,19 @@ export const MANAGED_START = '<!-- runpublic:managed:start -->';
 export const MANAGED_END = '<!-- runpublic:managed:end -->';
 
 const RUNPUBLIC_INSTRUCTIONS = `${MANAGED_START}
-## RunPublic remote development
+## RunPublic development servers
 
-- Use RunPublic when the user explicitly asks for a public URL, mobile or remote testing, a webhook endpoint, or on-the-go development access.
+- Use RunPublic by default whenever starting an interactive development server, frontend preview, API, or webhook handler. Its public HTTPS URL works for both local and remote testing.
+- Do not start RunPublic for unit tests, builds, linters, one-off scripts, databases, admin/debug ports, or processes that do not need a browser-accessible URL.
 - From the project root, run \`runpublic status --json\` first and reuse an active URL when possible.
 - Start one configured service with \`runpublic <service> --json\`. Use \`runpublic all --json\` when the requested test needs the complete frontend/backend stack.
 - If \`runpublic.json\` is missing, inspect the repository and use non-interactive setup such as \`runpublic --services <folders> --json\`; do not guess when the correct services are unclear.
-- Keep the RunPublic process alive for as long as remote access is needed, report every public URL to the user, and stop it only when asked.
-- Treat every RunPublic URL as Internet-accessible. Never expose databases, admin/debug ports, secret dashboards, or services that rely on network privacy. Preserve the application's own authentication and authorization.
+- Keep the RunPublic process alive while the development task is active, use the public URL as the primary browser/test URL, report every public URL to the user, and stop it only when asked.
+- Treat every RunPublic URL as Internet-accessible. Never expose secret dashboards or services that rely on network privacy. Preserve the application's own authentication and authorization.
 ${MANAGED_END}`;
 
 const CURSOR_FRONTMATTER = `---
-description: Use RunPublic for explicitly requested public, mobile, remote, or webhook testing
+description: Use RunPublic by default for interactive development servers and previews
 alwaysApply: true
 ---`;
 
