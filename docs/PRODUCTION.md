@@ -70,7 +70,7 @@ private installations. It reads the environment override or the private default
 admin-secret file:
 
 ```bash
-npm run cloudflare:admin -- create-account keshavmac 25
+npm run cloudflare:admin -- create-account alice 25
 ```
 
 The command prints a developer token exactly once. Deliver it through a secure
@@ -82,14 +82,14 @@ one-time token written directly to a new mode-`0600` file instead of displayed.
 ```bash
 runpub login \
   --server https://edge.runpublic.dev \
-  --account keshavmac \
+  --account alice \
   --token-file /path/to/temporary-token
 ```
 
 Delete the temporary file after login. Rotate a compromised token with:
 
 ```bash
-npm run cloudflare:admin -- create-token keshavmac replacement --revoke-existing
+npm run cloudflare:admin -- create-token alice replacement --revoke-existing
 ```
 
 ## Release checklist
