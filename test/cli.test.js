@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 
 import {
   buildServiceEnvironment,
+  promptForAgentInstructions,
   promptForServiceSelection,
   resolveServiceSelection,
 } from '../src/cli.js';
@@ -275,4 +276,74 @@ test('interactive setup renders choices and returns the selected services', asyn
   assert.match(rendered, /RunPublic found several development services/);
   assert.match(rendered, /2\. edison-web/);
   assert.match(rendered, /comma-separated numbers/);
+});
+
+test('AI-agent setup prompt is explicit and defaults to disabled', async () => {
+  for (const [answer, expected] of [['yes\n', true], ['\n', false]]) {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let rendered = '';
+    output.on('data', (chunk) => { rendered += chunk.toString(); });
+    input.end(answer);
+
+    assert.equal(await promptForAgentInstructions({ input, output }), expected);
+    assert.match(rendered, /Enable RunPublic for AI coding agents/);
+    assert.match(rendered, /\[y\/N\]/);
+  }
+});
+
+test('init --agents installs agent instructions non-interactively', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-agents-'));
+  const home = path.join(directory, 'home');
+  await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
+    name: 'agent-demo',
+    scripts: { dev: 'vite' },
+    devDependencies: { vite: '^7.0.0' },
+  })}\n`);
+
+  const env = {
+    ...process.env,
+    HOME: home,
+    CODEX_HOME: path.join(home, '.codex'),
+    RUNPUBLIC_HOME: path.join(directory, '.auth'),
+  };
+  const { stdout } = await execFileAsync(process.execPath, [cli, 'init', '--agents', '--json'], {
+    cwd: directory,
+    env,
+  });
+  const events = stdout.trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(events.filter((event) => event.type === 'agent-instructions').length, 4);
+  assert.match(
+    await readFile(path.join(home, '.codex', 'AGENTS.md'), 'utf8'),
+    /RunPublic remote development/,
+  );
+  assert.match(
+    await readFile(path.join(directory, '.cursor', 'rules', 'runpublic.mdc'), 'utf8'),
+    /alwaysApply: true/,
+  );
+
+  const status = await execFileAsync(process.execPath, [cli, 'agents', 'status', '--json'], {
+    cwd: directory,
+    env,
+  });
+  assert.ok(
+    status.stdout.trim().split('\n').map((line) => JSON.parse(line)).every(
+      (event) => event.type === 'agent-instructions' && event.installed,
+    ),
+  );
+
+  await execFileAsync(process.execPath, [cli, 'agents', 'remove', '--json'], {
+    cwd: directory,
+    env,
+  });
+  const removedStatus = await execFileAsync(
+    process.execPath,
+    [cli, 'agents', 'status', '--json'],
+    { cwd: directory, env },
+  );
+  assert.ok(
+    removedStatus.stdout.trim().split('\n').map((line) => JSON.parse(line)).every(
+      (event) => event.type === 'agent-instructions' && !event.installed,
+    ),
+  );
 });

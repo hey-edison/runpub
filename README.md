@@ -44,7 +44,9 @@ runpublic
 On the first run, the CLI detects common Node.js and Python development
 services, writes `runpublic.json`, starts them, and prints their stable HTTPS
 URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
-source code does not require restarting RunPublic.
+source code does not require restarting RunPublic. Interactive setup also asks
+whether AI coding agents should use RunPublic for explicitly requested mobile,
+remote, public-URL, and webhook testing. The default is no.
 
 If a repository contains several possible applications, RunPublic asks once
 instead of guessing:
@@ -71,7 +73,12 @@ Coding agents and CI can make the same choice without an interactive prompt:
 ```bash
 runpublic --services edison-web,backend --json
 runpublic --yes --json  # deliberately select every detected service
+runpublic --services edison-web,backend --agents --json
 ```
+
+Use `--no-agents` to explicitly skip the agent integration in an automated
+setup. Non-interactive and `--json` setup never changes agent instructions
+unless `--agents` is present.
 
 Natural shortcuts cover the common cases:
 
@@ -83,6 +90,7 @@ runpublic 3000           # expose an already-running port
 runpublic status         # show public, local-only, and stopped services
 runpublic stop           # stop this project's managed RunPublic sessions
 runpublic setup          # reopen detection and replace the saved selection
+runpublic agents status  # inspect AI-agent integration
 ```
 
 `runpublic setup` preserves custom commands, ports, and environment mappings
@@ -90,6 +98,38 @@ for services selected again by the same name or folder.
 
 The original explicit forms, such as `runpublic run frontend` and `runpublic
 expose 3000 --project demo --service frontend`, remain supported for scripts.
+
+## AI coding agents
+
+When the developer opts in, RunPublic adds a small managed instruction block
+to the supported global instruction files:
+
+```text
+~/.codex/AGENTS.md       Codex and the ChatGPT coding agent
+~/.claude/CLAUDE.md      Claude Code
+~/.gemini/GEMINI.md      Antigravity
+```
+
+If Codex already uses `AGENTS.override.md`, RunPublic updates that active file
+instead. Cursor stores its supported global User Rules in the application
+settings rather than a Markdown file, so RunPublic creates the supported
+project rule `.cursor/rules/runpublic.mdc` in each opted-in project.
+
+The instructions tell agents to activate RunPublic only for an explicit public
+URL, mobile/remote test, webhook, or on-the-go development request. Agents
+check status first, reuse live tunnels, select one service or the complete
+stack, keep the process alive, return the URL, and avoid exposing databases,
+admin/debug ports, secret dashboards, or unauthenticated sensitive services.
+
+The installer preserves all existing text and owns only content between
+`<!-- runpublic:managed:start -->` and `<!-- runpublic:managed:end -->`. It is
+safe to run repeatedly. Existing projects can manage the integration directly:
+
+```bash
+runpublic agents install
+runpublic agents status
+runpublic agents remove
+```
 
 The CLI verifies the issued RunPublic token before storing it in
 `~/.config/runpublic/config.json` with private file permissions. For private or

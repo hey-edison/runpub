@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-08-21
+
+- Add an explicit first-run opt-in for AI coding agents used in remote and
+  on-the-go development workflows.
+- Install idempotent, managed global instructions for Codex/ChatGPT coding
+  agents, Claude Code, and Antigravity, plus a project-level Cursor rule.
+- Add `--agents` and `--no-agents` for non-interactive setup.
+- Add `runpublic agents install|status|remove` so existing projects can manage
+  the integration without rerunning service detection.
+- Preserve existing instruction-file content and refuse malformed or duplicate
+  managed blocks instead of risking an overwrite.
+
 ## 0.4.0 - 2026-08-21
 
 - Discover development services in unconventional top-level application

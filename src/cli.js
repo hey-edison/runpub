@@ -6,6 +6,11 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
+  agentInstructionStatus,
+  installAgentInstructions,
+  removeAgentInstructions,
+} from './agent-instructions.js';
+import {
   authConfigPath,
   createProjectConfig,
   loadAuthConfig,
@@ -42,12 +47,15 @@ Usage:
   runpublic run [service] [--json]
   runpublic status [--json]
   runpublic stop
+  runpublic agents [status|install|remove] [--json]
   runpublic help
   runpublic version
 
 First-run setup options:
   --services <folders>   Select detected folders, comma-separated
   --yes                  Select every detected service without prompting
+  --agents               Install AI-agent instructions without prompting
+  --no-agents            Do not install AI-agent instructions
 
 Expose options:
   --host <host>          Local host (default: 127.0.0.1)
@@ -89,7 +97,9 @@ function parseArguments(argv) {
       name === 'skip-verify' ||
       name === 'no-browser' ||
       name === 'yes' ||
-      name === 'force'
+      name === 'force' ||
+      name === 'agents' ||
+      name === 'no-agents'
     ) {
       flags[name] = true;
       continue;
@@ -163,6 +173,9 @@ function createReporter(json) {
         process.stdout.write(`Stopping RunPublic process ${details.pid}...\n`);
       } else if (type === 'nothing-to-stop') {
         process.stdout.write('No active RunPublic session was found for this project.\n');
+      } else if (type === 'agent-instructions') {
+        const state = details.installed ? details.action : details.action === 'removed' ? 'removed' : 'not installed';
+        process.stdout.write(`${details.agent} (${details.scope}): ${state} — ${details.path}\n`);
       }
     },
   };
@@ -636,6 +649,41 @@ export async function promptForServiceSelection(
   }
 }
 
+export async function promptForAgentInstructions(
+  { input = process.stdin, output = process.stdout } = {},
+) {
+  output.write('\n');
+  const readline = createInterface({ input, output });
+  try {
+    while (true) {
+      const answer = await readline.question(
+        'Enable RunPublic for AI coding agents? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
+      );
+      const normalized = answer.trim().toLowerCase();
+      if (normalized === 'y' || normalized === 'yes') return true;
+      if (normalized === '' || normalized === 'n' || normalized === 'no') return false;
+      output.write('Please answer yes or no.\n');
+    }
+  } finally {
+    readline.close();
+  }
+}
+
+async function configureAgentInstructions(flags, reporter, projectDirectory, { prompt = true } = {}) {
+  if (flags.agents && flags['no-agents']) {
+    throw new Error('--agents and --no-agents cannot be used together');
+  }
+  let enabled = Boolean(flags.agents);
+  if (!flags.agents && !flags['no-agents']) {
+    if (!prompt || flags.json || !process.stdin.isTTY || !process.stdout.isTTY) return [];
+    enabled = await promptForAgentInstructions();
+  }
+  if (!enabled) return [];
+  const results = await installAgentInstructions({ projectDirectory });
+  for (const result of results) reporter.event('agent-instructions', result);
+  return results;
+}
+
 async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
   let existing;
   if (flags.force) {
@@ -708,6 +756,9 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
       command: service.command,
     });
   }
+  await configureAgentInstructions(flags, reporter, path.dirname(path.resolve(filePath)), {
+    prompt: !existing,
+  });
   return filePath;
 }
 
@@ -794,6 +845,36 @@ async function stopCommand(positionals, flags, reporter) {
   return 0;
 }
 
+async function agentsCommand(positionals, flags, reporter) {
+  assertAllowedFlags(flags, ['json']);
+  if (positionals.length > 1) {
+    throw new Error('usage: runpublic agents [status|install|remove] [--json]');
+  }
+  const action = positionals[0] ?? 'status';
+  let projectDirectory = process.cwd();
+  try {
+    projectDirectory = (await loadProjectConfig()).directory;
+  } catch (error) {
+    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+  }
+
+  let results;
+  if (action === 'install') {
+    results = await installAgentInstructions({ projectDirectory });
+  } else if (action === 'remove' || action === 'uninstall') {
+    results = await removeAgentInstructions({ projectDirectory });
+  } else if (action === 'status') {
+    results = (await agentInstructionStatus({ projectDirectory })).map((result) => ({
+      ...result,
+      action: result.installed ? 'installed' : 'missing',
+    }));
+  } else {
+    throw new Error('usage: runpublic agents [status|install|remove] [--json]');
+  }
+  for (const result of results) reporter.event('agent-instructions', result);
+  return 0;
+}
+
 async function portShortcut(port, flags, reporter) {
   assertAllowedFlags(flags, ['project', 'service', 'host', 'protocol', 'json']);
   let loaded;
@@ -851,7 +932,16 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (command === 'all') command = 'run';
     const setupRequested = command === 'setup';
     if (setupRequested) command = 'init';
-    const builtInCommands = new Set(['login', 'whoami', 'init', 'expose', 'run', 'status', 'stop']);
+    const builtInCommands = new Set([
+      'login',
+      'whoami',
+      'init',
+      'expose',
+      'run',
+      'status',
+      'stop',
+      'agents',
+    ]);
     if (/^\d+$/.test(command)) {
       commandArguments = [command, ...commandArguments];
       command = '__port__';
@@ -926,16 +1016,28 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
 
     if (command === 'init') {
-      assertAllowedFlags(flags, ['project', 'services', 'yes', 'force', 'json']);
+      assertAllowedFlags(flags, [
+        'project',
+        'services',
+        'yes',
+        'force',
+        'agents',
+        'no-agents',
+        'json',
+      ]);
       if (positionals.length > 0) throw new Error('init does not accept positional arguments');
       await initializeProject(flags, reporter, { allowEmpty: true });
       return 0;
+    }
+    if (command === 'agents') {
+      return await agentsCommand(positionals, flags, reporter);
     }
 
     if (command === 'expose') {
       return await exposeCommand(positionals, flags, reporter);
     }
     if (command === 'run') {
+      assertAllowedFlags(flags, ['project', 'services', 'yes', 'agents', 'no-agents', 'json']);
       await ensureProjectConfig(reporter, flags);
       return await runCommand(positionals, { ...(flags.json ? { json: true } : {}) }, reporter);
     }
