@@ -4,6 +4,7 @@ import test from 'node:test';
 import worker, {
   createHostname as createWorkerHostname,
   createServiceLabel as createWorkerServiceLabel,
+  tunnelResponseInit,
 } from '../cloudflare/src/worker.js';
 import { createHostname as createNodeHostname, createServiceLabel as createNodeServiceLabel } from '../src/naming.js';
 
@@ -62,6 +63,20 @@ test('GitHub device login fails closed until the operator enables it', async () 
   assert.deepEqual(await response.json(), {
     error: { code: 'SIGNUP_UNAVAILABLE', message: 'GitHub sign-in is not configured' },
   });
+});
+
+test('Cloudflare does not double-compress encoded tunnel responses', () => {
+  const compressed = tunnelResponseInit(200, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-encoding': 'gzip',
+  });
+  assert.equal(compressed.encodeBody, 'manual');
+  assert.equal(compressed.headers.get('content-encoding'), 'gzip');
+
+  const identity = tunnelResponseInit(200, {
+    'content-type': 'application/json',
+  });
+  assert.equal(identity.encodeBody, 'automatic');
 });
 
 test('Cloudflare edge rejects hostnames outside its managed domain', async () => {

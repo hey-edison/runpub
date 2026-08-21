@@ -747,6 +747,17 @@ function safeHeaders(value) {
   return result;
 }
 
+export function tunnelResponseInit(status, value) {
+  const headers = safeHeaders(value);
+  return {
+    status,
+    headers,
+    // The tunnel transports the local server's bytes without decoding them.
+    // Cloudflare must not automatically encode an already-compressed body.
+    encodeBody: headers.has('content-encoding') ? 'manual' : 'automatic',
+  };
+}
+
 function requestHeaders(request) {
   const result = {};
   for (const [name, value] of request.headers) {
@@ -1062,10 +1073,10 @@ export class TunnelSession {
       pending.discardBody =
         pending.method === 'HEAD' || statusCode === 204 || statusCode === 205 || statusCode === 304;
       pending.resolveStart(
-        new Response(pending.discardBody ? null : pending.readable, {
-          status: statusCode,
-          headers: safeHeaders(message.headers),
-        }),
+        new Response(
+          pending.discardBody ? null : pending.readable,
+          tunnelResponseInit(statusCode, message.headers),
+        ),
       );
       if (pending.discardBody) pending.writer.abort('Response does not permit a body').catch(() => {});
       return;
