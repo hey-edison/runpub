@@ -6,7 +6,7 @@
   "scripts": {
     "start:frontend": "node frontend/server.js",
     "start:backend": "node backend/server.js",
-    "runpublic": "runpublic run",
-    "devpublic": "devpublic run"
+    "runpublic": "runpublic",
+    "devpublic": "devpublic"
   }
 }

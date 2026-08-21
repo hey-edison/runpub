@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 - 2026-08-21
+
+- Make bare `runpublic` auto-detect, configure, start, and expose a project.
+- Add direct service aliases, `all`, numeric-port shorthand, `status`, and
+  cross-terminal `stop`.
+- Detect common Node.js, Python, workspace, and conventional monorepo layouts.
+- Add per-service working directories and interpolated environment mappings.
+- Inject deterministic `RUNPUBLIC_URL` and cross-service public URL variables.
+
 ## 0.2.0 - 2026-08-21
 
 - Add a horizontally scalable Cloudflare Worker and Durable Object edge.

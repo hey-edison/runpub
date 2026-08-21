@@ -24,7 +24,7 @@ managed network that makes the URLs work.
 
 - One sentence: “Stable HTTPS URLs for every local frontend and backend, from
   one global CLI.”
-- A 20-second example showing install, login, `runpublic run`, and a webhook.
+- A 20-second example showing install, login, bare `runpublic`, and a webhook.
 - Why it exists and how it differs from generic random-URL tunnel tools.
 - The honest beta limits and security warning.
 - One request: try it on a real project and open an issue or Discussion.

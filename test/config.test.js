@@ -75,10 +75,58 @@ test("finds and validates project configuration from a nested directory", async 
   assert.deepEqual(loaded.config.services.frontend, {
     command: "npm run dev",
     port: 5173,
+    cwd: ".",
+    env: {},
     host: "127.0.0.1",
     protocol: "http",
     readyTimeoutMs: 15000
   });
+});
+
+test("accepts a safe monorepo service working directory", () => {
+  const config = validateProjectConfig({
+    project: "fullstack-demo",
+    services: {
+      frontend: { command: "npm run dev", port: 3000, cwd: "apps/web" }
+    }
+  });
+  assert.equal(config.services.frontend.cwd, "apps/web");
+  assert.deepEqual(config.services.frontend.env, {});
+  assert.throws(
+    () => validateProjectConfig({
+      project: "fullstack-demo",
+      services: {
+        frontend: { command: "npm run dev", port: 3000, cwd: "../other-project" }
+      }
+    }),
+    /relative path inside the project/
+  );
+});
+
+test("accepts string environment mappings and rejects unsafe entries", () => {
+  const config = validateProjectConfig({
+    project: "fullstack-demo",
+    services: {
+      frontend: {
+        command: "npm run dev",
+        port: 3000,
+        env: { NEXT_PUBLIC_API_BASE: "${RUNPUBLIC_BACKEND_URL}/api/v1" }
+      }
+    }
+  });
+  assert.equal(
+    config.services.frontend.env.NEXT_PUBLIC_API_BASE,
+    "${RUNPUBLIC_BACKEND_URL}/api/v1"
+  );
+  assert.throws(
+    () => validateProjectConfig({
+      project: "fullstack-demo",
+      services: {
+        frontend: { command: "npm run dev", port: 3000, env: { "BAD-NAME": "x" } }
+      }
+    }),
+    /invalid variable name/
+  );
 });
 
 test("rejects unsafe project configuration", () => {

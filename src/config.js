@@ -53,7 +53,7 @@ export function validateService(service, name) {
   assertObject(service, `services.${name}`);
 
   const unknownKeys = Object.keys(service).filter(
-    (key) => !['command', 'port', 'host', 'protocol', 'readyTimeoutMs'].includes(key),
+    (key) => !['command', 'port', 'cwd', 'env', 'host', 'protocol', 'readyTimeoutMs'].includes(key),
   );
   if (unknownKeys.length > 0) {
     throw new Error(`services.${name} has unknown field "${unknownKeys[0]}"`);
@@ -65,6 +65,28 @@ export function validateService(service, name) {
 
   if (!Number.isInteger(service.port) || service.port < 1 || service.port > 65535) {
     throw new Error(`services.${name}.port must be an integer between 1 and 65535`);
+  }
+
+  if (
+    service.cwd !== undefined &&
+    (typeof service.cwd !== 'string' ||
+      service.cwd.trim() === '' ||
+      path.isAbsolute(service.cwd) ||
+      service.cwd.split(/[\\/]+/).includes('..'))
+  ) {
+    throw new Error(`services.${name}.cwd must be a relative path inside the project`);
+  }
+
+  if (service.env !== undefined) {
+    assertObject(service.env, `services.${name}.env`);
+    for (const [envName, envValue] of Object.entries(service.env)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(envName)) {
+        throw new Error(`services.${name}.env has invalid variable name "${envName}"`);
+      }
+      if (typeof envValue !== 'string') {
+        throw new Error(`services.${name}.env.${envName} must be a string`);
+      }
+    }
   }
 
   if (
@@ -90,6 +112,8 @@ export function validateService(service, name) {
   return {
     command: service.command,
     port: service.port,
+    cwd: service.cwd ?? '.',
+    env: service.env ?? {},
     host: service.host ?? '127.0.0.1',
     protocol: service.protocol ?? 'http',
     readyTimeoutMs: service.readyTimeoutMs ?? 15_000,
@@ -260,8 +284,12 @@ export async function loadProjectConfig(startDirectory = process.cwd()) {
   };
 }
 
-export async function createProjectConfig(project, directory = process.cwd()) {
+export async function createProjectConfig(project, directory = process.cwd(), services = {}) {
   const validatedProject = validateName(project, 'project');
+  const validated = validateProjectConfig(
+    { project: validatedProject, services },
+    { requireServices: false },
+  );
   const filePath = path.join(path.resolve(directory), PROJECT_CONFIG_NAME);
   const handle = await open(filePath, 'wx', 0o644).catch((error) => {
     if (error?.code === 'EEXIST') {
@@ -272,7 +300,7 @@ export async function createProjectConfig(project, directory = process.cwd()) {
 
   try {
     await handle.writeFile(
-      `${JSON.stringify({ project: validatedProject, services: {} }, null, 2)}\n`,
+      `${JSON.stringify({ project: validated.project, services }, null, 2)}\n`,
       'utf8',
     );
   } finally {

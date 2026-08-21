@@ -35,6 +35,31 @@ runpublic login
 Pass `--account your-name` on the first login when you want a specific available
 namespace; otherwise RunPublic starts from your GitHub username.
 
+Then enter a project and run one command:
+
+```bash
+runpublic
+```
+
+On the first run, the CLI detects common Node.js and Python development
+services, writes `runpublic.json`, starts them, and prints their stable HTTPS
+URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
+source code does not require restarting RunPublic.
+
+Natural shortcuts cover the common cases:
+
+```bash
+runpublic frontend       # start one configured service
+runpublic backend
+runpublic all            # start every configured service
+runpublic 3000           # expose an already-running port
+runpublic status         # show public, local-only, and stopped services
+runpublic stop           # stop this project's managed RunPublic sessions
+```
+
+The original explicit forms, such as `runpublic run frontend` and `runpublic
+expose 3000 --project demo --service frontend`, remain supported for scripts.
+
 The CLI verifies the issued RunPublic token before storing it in
 `~/.config/runpublic/config.json` with private file permissions. For private or
 self-hosted installations, operator-issued token login remains available with
@@ -55,19 +80,24 @@ Or commit a `runpublic.json` so one command starts and exposes a whole project:
   "services": {
     "frontend": {
       "command": "npm run dev",
-      "port": 5173
+      "port": 3000,
+      "cwd": "edison-web",
+      "env": {
+        "NEXT_PUBLIC_API_BASE": "${RUNPUBLIC_BACKEND_URL}/api/v1"
+      }
     },
     "backend": {
-      "command": "npm run backend",
-      "port": 8000
+      "command": ".venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+      "port": 8000,
+      "cwd": "backend"
     }
   }
 }
 ```
 
 ```bash
-runpublic run
-runpublic run frontend
+runpublic
+runpublic frontend
 ```
 
 This also works in npm scripts and with coding agents:
@@ -75,7 +105,7 @@ This also works in npm scripts and with coding agents:
 ```json
 {
   "scripts": {
-    "public": "runpublic run"
+    "public": "runpublic"
   }
 }
 ```
@@ -89,6 +119,19 @@ The URL format is deterministic:
 Long names receive a stable 128-bit hash suffix and remain within DNS limits.
 The hosted edge permanently reserves the full account/project/service tuple and
 hostname in its database.
+
+Every started process receives `RUNPUBLIC_URL` for its own public URL and one
+variable per configured service, such as `RUNPUBLIC_FRONTEND_URL` and
+`RUNPUBLIC_BACKEND_URL`. The optional service `env` mapping expands these
+variables before launching the command, which lets a frontend point to its
+public development API without embedding an account-specific hostname.
+
+Auto-detection currently understands npm, pnpm, Yarn, and Bun projects using
+common development scripts; Vite, Next.js, React, Vue, Svelte, Angular, Nuxt,
+Astro, Gatsby, Express, NestJS, Fastify, Django, FastAPI, and Flask conventions;
+and conventional `frontend`/`backend`, `apps/*`, `packages/*`, and package
+manager workspace layouts. Unusual repositories can run `runpublic init` and
+edit the small generated file once.
 
 ## How it works
 
@@ -132,7 +175,7 @@ runpublic login \
   --account keshavmac \
   --token local-secret
 cd examples/fullstack
-runpublic run
+runpublic
 ```
 
 The `.test` domain does not resolve publicly. Exercise the route with an

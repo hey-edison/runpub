@@ -1,6 +1,6 @@
 {
   "name": "runpublic",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Project-aware public HTTPS URLs for local development services",
   "type": "module",
   "main": "./src/tunnel-client.js",
@@ -31,7 +31,7 @@
     "start:edge": "node ./bin/runpublic-edge.js",
     "test": "node --test",
     "test:e2e": "node --test test/e2e.test.js",
-    "check": "node --check cloudflare/src/worker.js && node --check src/cli.js && node --check src/config.js && node --check src/tunnel-client.js && node --check src/edge-server.js && node --check src/naming.js && node --check src/proxy-headers.js && npm test && npm pack --dry-run",
+    "check": "node --check cloudflare/src/worker.js && node --check src/cli.js && node --check src/config.js && node --check src/detect.js && node --check src/process-state.js && node --check src/tunnel-client.js && node --check src/edge-server.js && node --check src/naming.js && node --check src/proxy-headers.js && npm test && npm pack --dry-run",
     "cloudflare:dev": "wrangler dev --config cloudflare/wrangler.jsonc",
     "cloudflare:deploy": "wrangler deploy --config cloudflare/wrangler.jsonc",
     "cloudflare:migrate:local": "wrangler d1 migrations apply runpublic-production --local --config cloudflare/wrangler.jsonc",

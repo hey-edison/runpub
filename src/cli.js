@@ -13,6 +13,14 @@ import {
   validateName,
   validateServer,
 } from './config.js';
+import { detectProject, inferProjectName } from './detect.js';
+import { createServiceLabel } from './naming.js';
+import {
+  listProcessStates,
+  processIsAlive,
+  removeProcessState,
+  saveProcessState,
+} from './process-state.js';
 import { TunnelClient } from './tunnel-client.js';
 
 const DEFAULT_SERVER = 'https://edge.runpublic.dev';
@@ -20,12 +28,18 @@ const DEFAULT_SERVER = 'https://edge.runpublic.dev';
 const HELP = `runpublic - expose local development services over HTTPS
 
 Usage:
+  runpublic                         Auto-detect, start, and expose this project
+  runpublic <service>               Start and expose one configured service
+  runpublic all                     Start and expose every configured service
+  runpublic <port> [options]        Expose an already-running local port
   runpublic login [--server <url>] [--account <namespace>] [--no-browser]
   runpublic login [--server <url>] --account <name> (--token <token> | --token-file <path>)
   runpublic whoami [--json]
-  runpublic init --project <name> [--json]
+  runpublic init [--project <name>] [--json]
   runpublic expose <port> --project <name> --service <name> [options]
   runpublic run [service] [--json]
+  runpublic status [--json]
+  runpublic stop
   runpublic help
   runpublic version
 
@@ -116,8 +130,24 @@ function createReporter(json) {
         );
       } else if (type === 'init') {
         process.stdout.write(`Created ${details.path}\n`);
+      } else if (type === 'detected') {
+        process.stdout.write(
+          `Detected ${details.service}: ${details.kind} in ${details.cwd} (port ${details.port})\n`,
+        );
       } else if (type === 'whoami') {
         process.stdout.write(`${details.account} (${details.server})\n`);
+      } else if (type === 'status') {
+        const state = details.tunnelActive
+          ? 'public'
+          : details.localOnline
+            ? 'local only'
+            : 'stopped';
+        const publicPart = details.tunnelActive && details.publicUrl ? ` — ${details.publicUrl}` : '';
+        process.stdout.write(`${details.service}: ${state} on ${details.localUrl}${publicPart}\n`);
+      } else if (type === 'stop-requested') {
+        process.stdout.write(`Stopping RunPublic process ${details.pid}...\n`);
+      } else if (type === 'nothing-to-stop') {
+        process.stdout.write('No active RunPublic session was found for this project.\n');
       }
     },
   };
@@ -284,6 +314,19 @@ async function exposeCommand(positionals, flags, reporter) {
     publicUrl: result.publicUrl,
     localUrl: localUrl(protocol, host, port),
   });
+  let statePath;
+  try {
+    statePath = await saveProcessState({
+      version: 1,
+      pid: process.pid,
+      project,
+      startedAt: new Date().toISOString(),
+      services: [{ name: service, port, publicUrl: result.publicUrl }],
+    });
+  } catch (error) {
+    await Promise.resolve(tunnel.stop()).catch(() => {});
+    throw error;
+  }
 
   return new Promise((resolve) => {
     let stopping = false;
@@ -293,6 +336,7 @@ async function exposeCommand(positionals, flags, reporter) {
       process.off('SIGINT', onSigint);
       process.off('SIGTERM', onSigterm);
       await Promise.resolve(tunnel.stop()).catch(() => {});
+      await removeProcessState(statePath).catch(() => {});
       reporter.event('stopped', { project, service, signal });
       resolve(signalExitCode(signal));
     };
@@ -303,10 +347,40 @@ async function exposeCommand(positionals, flags, reporter) {
   });
 }
 
-function spawnService(service, directory, json) {
+function environmentVariableName(serviceName) {
+  return `RUNPUBLIC_${serviceName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_URL`;
+}
+
+export function buildServiceEnvironment(auth, project, serviceName, service, allServices) {
+  const env = { ...process.env };
+  const domain = publicDomain(auth);
+  env.RUNPUBLIC_PROJECT = project;
+  env.RUNPUBLIC_SERVICE = serviceName;
+  if (domain) {
+    for (const name of Object.keys(allServices)) {
+      const publicUrl = `https://${createServiceLabel({ project, service: name, account: auth.account })}.${domain}`;
+      env[environmentVariableName(name)] = publicUrl;
+      if (name === serviceName) env.RUNPUBLIC_URL = publicUrl;
+    }
+  }
+  for (const [name, rawValue] of Object.entries(service.env)) {
+    const expanded = rawValue.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, variable) =>
+      env[variable] === undefined ? match : env[variable],
+    );
+    if (/\$\{RUNPUBLIC_[A-Z0-9_]+\}/.test(expanded)) {
+      throw new Error(
+        `services.${serviceName}.env.${name} needs a public domain; set RUNPUBLIC_DOMAIN for this server`,
+      );
+    }
+    env[name] = expanded;
+  }
+  return env;
+}
+
+function spawnService(service, directory, json, env) {
   return spawn(service.command, {
-    cwd: directory,
-    env: process.env,
+    cwd: path.resolve(directory, service.cwd),
+    env,
     shell: true,
     stdio: json ? ['inherit', process.stderr, process.stderr] : 'inherit',
   });
@@ -364,6 +438,7 @@ async function runCommand(positionals, flags, reporter) {
   const running = new Map();
   let stopping = false;
   let signal;
+  let statePath;
 
   const stopEntry = async (name, entry, stopChild = true) => {
     if (entry.stopped) return;
@@ -391,7 +466,18 @@ async function runCommand(positionals, flags, reporter) {
 
   try {
     for (const [name, service] of entries) {
-      const child = spawnService(service, loaded.directory, Boolean(flags.json));
+      const child = spawnService(
+        service,
+        loaded.directory,
+        Boolean(flags.json),
+        buildServiceEnvironment(
+          auth,
+          loaded.config.project,
+          name,
+          service,
+          loaded.config.services,
+        ),
+      );
       const entry = { child, tunnel: undefined, stopped: false };
       running.set(name, entry);
       reporter.event('started', {
@@ -417,6 +503,15 @@ async function runCommand(positionals, flags, reporter) {
         });
       });
     }
+
+    statePath = await saveProcessState({
+      version: 1,
+      pid: process.pid,
+      project: loaded.config.project,
+      configPath: loaded.path,
+      startedAt: new Date().toISOString(),
+      services: entries.map(([name, service]) => ({ name, port: service.port })),
+    });
 
     await Promise.all(
       entries.map(async ([name, service]) => {
@@ -459,7 +554,140 @@ async function runCommand(positionals, flags, reporter) {
   } finally {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
+    await removeProcessState(statePath).catch(() => {});
   }
+}
+
+async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
+  const detection = await detectProject(process.cwd(), flags.project);
+  if (!allowEmpty && Object.keys(detection.services).length === 0) {
+    throw new Error(
+      'could not detect a development service; run "runpublic init --project <name>" and add its command and port to runpublic.json',
+    );
+  }
+  const filePath = await createProjectConfig(
+    detection.project,
+    process.cwd(),
+    detection.services,
+  );
+  reporter.event('init', { project: detection.project, path: path.resolve(filePath) });
+  for (const service of detection.detections) {
+    reporter.event('detected', {
+      project: detection.project,
+      service: service.name,
+      kind: service.detectedAs,
+      cwd: service.cwd,
+      port: service.port,
+      command: service.command,
+    });
+  }
+  return filePath;
+}
+
+async function ensureProjectConfig(reporter) {
+  try {
+    return await loadProjectConfig();
+  } catch (error) {
+    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    await initializeProject({}, reporter);
+    return await loadProjectConfig();
+  }
+}
+
+function publicDomain(auth) {
+  if (process.env.RUNPUBLIC_DOMAIN) return process.env.RUNPUBLIC_DOMAIN;
+  const hostname = new URL(auth.server).hostname;
+  if (hostname === 'edge.runpublic.dev' || hostname.endsWith('.runpublic.dev')) {
+    return 'runpublic.dev';
+  }
+  return undefined;
+}
+
+async function statusCommand(positionals, flags, reporter) {
+  assertAllowedFlags(flags, ['json']);
+  if (positionals.length > 0) throw new Error('status does not accept positional arguments');
+  const loaded = await loadProjectConfig();
+  let auth;
+  try {
+    auth = await loadAuthConfig();
+  } catch {
+    auth = undefined;
+  }
+  const domain = auth ? publicDomain(auth) : undefined;
+  const states = await listProcessStates(loaded.config.project);
+  const liveStates = [];
+  for (const state of states) {
+    if (processIsAlive(state.pid)) liveStates.push(state);
+    else await removeProcessState(state.filePath);
+  }
+
+  for (const [name, service] of Object.entries(loaded.config.services)) {
+    const localOnline = await tryPort(service.host, service.port);
+    const tunnelActive = liveStates.some((state) =>
+      state.services.some((activeService) => activeService.name === name),
+    );
+    const publicUrl = domain
+      ? `https://${createServiceLabel({ project: loaded.config.project, service: name, account: auth.account })}.${domain}`
+      : undefined;
+    reporter.event('status', {
+      project: loaded.config.project,
+      service: name,
+      localOnline,
+      tunnelActive,
+      localUrl: localUrl(service.protocol, service.host, service.port),
+      publicUrl,
+    });
+  }
+  return 0;
+}
+
+async function stopCommand(positionals, flags, reporter) {
+  assertAllowedFlags(flags, ['json']);
+  if (positionals.length > 0) throw new Error('stop does not accept positional arguments');
+  let project;
+  try {
+    project = (await loadProjectConfig()).config.project;
+  } catch (error) {
+    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    project = await inferProjectName();
+  }
+
+  const states = await listProcessStates(project);
+  let stopped = 0;
+  for (const state of states) {
+    if (!processIsAlive(state.pid)) {
+      await removeProcessState(state.filePath);
+      continue;
+    }
+    process.kill(state.pid, 'SIGTERM');
+    reporter.event('stop-requested', { project, pid: state.pid, services: state.services });
+    stopped += 1;
+  }
+  if (stopped === 0) reporter.event('nothing-to-stop', { project });
+  return 0;
+}
+
+async function portShortcut(port, flags, reporter) {
+  assertAllowedFlags(flags, ['project', 'service', 'host', 'protocol', 'json']);
+  let loaded;
+  try {
+    loaded = await loadProjectConfig();
+  } catch (error) {
+    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+  }
+  const numericPort = Number(port);
+  const matching = loaded
+    ? Object.entries(loaded.config.services).find(([, service]) => service.port === numericPort)
+    : undefined;
+  const project = flags.project ?? loaded?.config.project ?? await inferProjectName();
+  const service = flags.service ?? matching?.[0] ?? 'app';
+  return await exposeCommand([port], {
+    ...flags,
+    project,
+    service,
+    host: flags.host ?? matching?.[1].host,
+    protocol: flags.protocol ?? matching?.[1].protocol,
+  }, reporter);
 }
 
 async function packageVersion() {
@@ -475,8 +703,16 @@ async function packageVersion() {
 export async function runCli(argv = process.argv.slice(2)) {
   const jsonRequested = argv.includes('--json') || argv.some((arg) => arg.startsWith('--json='));
   try {
-    const command = argv[0];
-    if (!command || command === 'help' || command === '--help' || command === '-h') {
+    let command = argv[0];
+    let commandArguments = argv.slice(1);
+    if (!command) {
+      command = 'run';
+      commandArguments = [];
+    } else if (command === '--json') {
+      command = 'run';
+      commandArguments = argv;
+    }
+    if (command === 'help' || command === '--help' || command === '-h') {
       process.stdout.write(HELP);
       return 0;
     }
@@ -485,7 +721,17 @@ export async function runCli(argv = process.argv.slice(2)) {
       return 0;
     }
 
-    const { positionals, flags } = parseArguments(argv.slice(1));
+    if (command === 'all') command = 'run';
+    const builtInCommands = new Set(['login', 'whoami', 'init', 'expose', 'run', 'status', 'stop']);
+    if (/^\d+$/.test(command)) {
+      commandArguments = [command, ...commandArguments];
+      command = '__port__';
+    } else if (!builtInCommands.has(command)) {
+      commandArguments = [command, ...commandArguments];
+      command = 'run';
+    }
+
+    const { positionals, flags } = parseArguments(commandArguments);
     const reporter = createReporter(Boolean(flags.json));
     if (flags.help) {
       process.stdout.write(HELP);
@@ -552,9 +798,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     if (command === 'init') {
       assertAllowedFlags(flags, ['project', 'json']);
       if (positionals.length > 0) throw new Error('init does not accept positional arguments');
-      const project = requiredFlag(flags, 'project');
-      const filePath = await createProjectConfig(project);
-      reporter.event('init', { project, path: path.resolve(filePath) });
+      await initializeProject(flags, reporter, { allowEmpty: true });
       return 0;
     }
 
@@ -562,7 +806,19 @@ export async function runCli(argv = process.argv.slice(2)) {
       return await exposeCommand(positionals, flags, reporter);
     }
     if (command === 'run') {
+      await ensureProjectConfig(reporter);
       return await runCommand(positionals, flags, reporter);
+    }
+    if (command === '__port__') {
+      const [port, ...extraPositionals] = positionals;
+      if (extraPositionals.length > 0) throw new Error('usage: runpublic <port> [options]');
+      return await portShortcut(port, flags, reporter);
+    }
+    if (command === 'status') {
+      return await statusCommand(positionals, flags, reporter);
+    }
+    if (command === 'stop') {
+      return await stopCommand(positionals, flags, reporter);
     }
 
     throw new Error(`unknown command "${command}" (run "runpublic help")`);
