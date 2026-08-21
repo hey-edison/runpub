@@ -1,15 +1,21 @@
-name: Publish npm package
+name: Publish npm package from main
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 jobs:
   publish:
+    if: github.repository == 'hey-edison/runpub'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -19,12 +25,34 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm test
-      - name: Publish when this version is new
+      - run: npm run check
+      - name: Check whether the version is new
+        id: version
         run: |
-          PACKAGE_VERSION=$(node --print "require('./package.json').version")
-          if npm view "runpub@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            echo "runpub@${PACKAGE_VERSION} is already published"
+          package_version=$(node --print "require('./package.json').version")
+          echo "package_version=${package_version}" >> "$GITHUB_OUTPUT"
+          if npm view "runpub@${package_version}" version >/dev/null 2>&1; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "runpub@${package_version} is already published"
           else
-            npm publish --access public
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "runpub@${package_version} is new"
+          fi
+      - name: Publish to npm with provenance
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm publish --access public --provenance
+      - name: Create the matching GitHub release
+        if: steps.version.outputs.should_publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_VERSION: ${{ steps.version.outputs.package_version }}
+        run: |
+          release_tag="v${PACKAGE_VERSION}"
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            echo "GitHub release ${release_tag} already exists"
+          else
+            gh release create "$release_tag" \
+              --target "$GITHUB_SHA" \
+              --title "RunPub ${PACKAGE_VERSION}" \
+              --generate-notes
           fi

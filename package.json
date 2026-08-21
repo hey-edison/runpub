@@ -1,6 +1,6 @@
 {
   "name": "runpub",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Stable public HTTPS URLs for local apps, webhooks, mobile testing, and AI coding agents",
   "type": "module",
   "main": "./src/tunnel-client.js",
