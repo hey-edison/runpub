@@ -1,7 +1,7 @@
 {
   "name": "runpub",
-  "version": "0.6.0",
-  "description": "Project-aware public HTTPS URLs for local development services",
+  "version": "0.6.1",
+  "description": "Stable public HTTPS URLs for local apps, webhooks, mobile testing, and AI coding agents",
   "type": "module",
   "main": "./src/tunnel-client.js",
   "exports": {
@@ -48,7 +48,16 @@
     "https",
     "frontend",
     "backend",
-    "developer-tools"
+    "developer-tools",
+    "local-tunnel",
+    "public-url",
+    "remote-development",
+    "mobile-testing",
+    "ai-agents",
+    "codex",
+    "claude",
+    "monorepo",
+    "oauth-callback"
   ],
   "author": "Keshav Patil",
   "license": "MIT",
@@ -59,7 +68,7 @@
   "bugs": {
     "url": "https://github.com/hey-edison/runpub/issues"
   },
-  "homepage": "https://github.com/hey-edison/runpub#readme",
+  "homepage": "https://runpublic.dev",
   "engines": {
     "node": ">=20"
   },

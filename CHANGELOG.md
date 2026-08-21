@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1 - 2026-08-21
+
+- Reframe the README around the original remote AI development problem: opening
+  a coding agent's local changes from a phone or another device.
+- Add outcome-first use cases, an honest one-off-tunnel comparison, automation
+  boundaries, and direct answers for mobile previews, full-stack apps, webhooks,
+  stable URLs, Cloudflare accounts, and public access.
+- Improve npm and GitHub discovery metadata for localhost tunnels, remote
+  development, mobile testing, and AI coding-agent workflows.
+
 ## 0.6.0 - 2026-08-21
 
 - Rename the product, npm package, CLI, repository, project manifest, and

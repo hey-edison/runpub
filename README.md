@@ -1,62 +1,84 @@
-# RunPub
+# RunPub — stable public HTTPS URLs for localhost
 
-RunPub gives local frontends, APIs, and webhook handlers stable public HTTPS
-URLs from one global CLI.
+[![npm version](https://img.shields.io/npm/v/runpub.svg)](https://www.npmjs.com/package/runpub)
+[![CI](https://github.com/hey-edison/runpub/actions/workflows/ci.yml/badge.svg)](https://github.com/hey-edison/runpub/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/runpub.svg)](LICENSE)
+
+[npm package](https://www.npmjs.com/package/runpub) ·
+[report a bug](https://github.com/hey-edison/runpub/issues/new/choose) ·
+[ask a question or share feedback](https://github.com/hey-edison/runpub/discussions)
+
+**Open your local frontend, API, or webhook from your phone, another computer,
+an AI coding agent, or any external service—through one stable public HTTPS
+URL.**
+
+RunPub is a project-aware development tunnel. It detects and starts local
+services, gives each one a predictable URL, connects frontends to backends, and
+keeps framework hot reload working through the tunnel.
 
 ```text
 https://fullstack-demo-frontend-keshavmac.runpublic.dev
 https://fullstack-demo-backend-keshavmac.runpublic.dev
 ```
 
-The developer runs one command. RunPub opens an authenticated outbound
-tunnel, so no router configuration, inbound firewall rule, TLS certificate, or
-developer-owned Cloudflare account is required.
+It is built for development previews and testing. It is not a production app
+host: the URL works only while RunPub, your local service, network, and computer
+are running.
 
-> **Public beta:** a RunPub URL exposes a process on your computer to the
-> Internet. Never expose a database, admin port, secrets dashboard, or service
-> containing sensitive data without appropriate application authentication.
+## Why RunPub exists
 
-## Install and use
+RunPub started with a real remote-development problem: a coding agent could make
+changes on my development computer, but I could not see its local preview from
+my phone. Codex or Claude could run the app on `localhost`, but my phone could
+not open that computer's `localhost`. I kept finding ports, setting up tunnels,
+copying new URLs, reconnecting the frontend to the backend, and repeating the
+same setup later.
 
-RunPub requires Node.js 20 or newer. Install the CLI globally:
-
-```bash
-npm install --global runpub
-```
-
-RunPub is the product, npm package, CLI, GitHub repository, manifest, and
-environment-variable prefix. The hosted domain intentionally remains
-`runpublic.dev`, so existing public URLs do not change. The former `runpublic`
-command, `runpublic.json`, `RUNPUBLIC_*` variables, local credential store, and
-tunnel API paths remain supported as migration aliases; new projects should use
-the shorter names.
-
-During source development, clone this repository and run `npm install -g .`.
-Sign in once with GitHub. The device flow asks only for your public GitHub
-identity and creates a unique RunPub namespace automatically:
-
-```bash
-runpub login
-```
-
-Pass `--account your-name` on the first login when you want a specific available
-namespace; otherwise RunPub starts from your GitHub username.
-
-Then enter a project and run one command:
+RunPub turns that recurring work into one command:
 
 ```bash
 runpub
 ```
 
-On the first run, the CLI detects common Node.js and Python development
-services, writes `runpub.json`, starts them, and prints their stable HTTPS
-URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
-source code does not require restarting RunPub. Interactive setup also asks
-whether AI coding agents should use RunPub by default whenever they start an
-interactive development server. The default answer to this opt-in is no.
+The agent returns a stable URL. Open it on your phone and keep refreshing—or let
+the framework's hot reload update it—as the agent edits the local project. The
+same URL can be used from your own desktop browser, sent to a teammate, or
+entered as a webhook callback.
 
-If a repository contains several possible applications, RunPub asks once
-instead of guessing:
+After the global install, one login, and a project's first-run selection, the
+normal development loop is just `runpub`, `runpub frontend`, `runpub backend`,
+or `runpub all`.
+
+## When is RunPub useful?
+
+| Use case | What RunPub changes |
+| --- | --- |
+| Remote AI coding | Codex, Claude Code, Cursor, or Antigravity can start the local app and return a URL you can test from your phone. |
+| Mobile and cross-device testing | Open a localhost project on a real phone, tablet, or second computer without joining the same network. |
+| Full-stack local development | Start and expose a frontend and backend together, with public service URLs available as environment variables. |
+| Webhook and OAuth callback testing | Give GitHub, Stripe, Twilio, or another external service an HTTPS endpoint that reaches your local handler. |
+| Temporary sharing | Send a current local preview to a teammate, designer, tester, or client without deploying a preview build. |
+| Agent and script automation | Use stable JSON output, deterministic hostnames, and non-interactive service selection in coding-agent or CI workflows. |
+
+## Quick start
+
+RunPub requires Node.js 20 or newer.
+
+```bash
+npm install --global runpub
+runpub login
+cd my-project
+runpub
+```
+
+Sign in once with GitHub. The device flow requests only your public GitHub
+identity and creates a unique RunPub namespace. End users do not need a
+Cloudflare account, a domain, a TLS certificate, router configuration, or an
+inbound firewall rule.
+
+On the first project run, RunPub detects common Node.js and Python development
+services and asks which ones to expose when the choice is ambiguous. It saves
+the answer in `runpub.json`; later runs reuse it and print the same URLs.
 
 ```text
 RunPub found several development services:
@@ -71,11 +93,78 @@ Detected backend: FastAPI backend in backend (port 8000)
 Detected frontend: Node.js frontend in edison-web (port 3000)
 ```
 
-When one frontend and one backend are selected, their service names become the
-simple `frontend` and `backend` aliases. Selecting multiple services with the
-same role uses their folder names so every URL remains unambiguous.
+Interactive setup also asks whether supported AI coding agents should use
+RunPub by default when they start browser-accessible development servers. This
+is opt-in and defaults to no.
 
-Coding agents and CI can make the same choice without an interactive prompt:
+## What does RunPub automate?
+
+For a conventional repository, RunPub handles the complete recurring workflow:
+
+- detects common frontend, backend, monorepo, package-manager, and Python app
+  layouts;
+- remembers the selected services, commands, folders, ports, and URL names;
+- starts one service or the full stack and opens authenticated outbound tunnels;
+- assigns each account/project/service combination the same deterministic HTTPS
+  hostname;
+- injects each service's public URL so a local frontend can call its public
+  backend;
+- forwards HTTP and WebSockets, so framework hot reload can keep working; and
+- reconnects interrupted tunnels and can teach supported coding agents to check
+  status, reuse a running tunnel, and return its URL.
+
+There are three honest boundaries: your computer and RunPub process must stay
+online, public URLs need the same application authentication you would require
+on any public API, and an unusual repository may need a small manual edit to
+`runpub.json` after detection.
+
+> **Public beta:** a RunPub URL exposes a process on your computer to the
+> Internet. Never expose a database, admin port, secrets dashboard, or service
+> containing sensitive data without appropriate application authentication.
+
+## RunPub versus a one-off tunnel
+
+Tools such as ngrok, Cloudflare Quick Tunnels, and localtunnel are useful for
+putting one local port on the Internet. RunPub focuses on the layer above that:
+remembering an entire development project and making the workflow natural for
+people and coding agents.
+
+| Workflow | RunPub | Typical one-off tunnel command |
+| --- | --- | --- |
+| Expose an already-running port | Yes | Yes |
+| Detect and start project services | Built in | You start and identify them |
+| Frontend and backend together | One project command | Usually one tunnel command per port |
+| Public URL | Stable `{project}-{service}-{account}` name | Often session-assigned unless separately reserved |
+| Frontend-to-backend URL setup | Injected project variables | Configure and copy URLs manually |
+| AI coding-agent default | Optional managed instructions | Configure the agent workflow yourself |
+| Developer-owned Cloudflare account | Not required | Depends on the provider and setup |
+
+RunPub is not intended to replace the dashboards, traffic inspection, access
+policies, or production features offered by general tunnel platforms.
+
+## Project setup and commands
+
+Natural shortcuts cover the common cases:
+
+```bash
+runpub                 # detect/setup once, then start configured services
+runpub frontend        # start one configured service
+runpub backend
+runpub all             # start every configured service
+runpub 3000            # expose an already-running port
+runpub status          # show public, local-only, and stopped services
+runpub stop            # stop this project's managed RunPub sessions
+runpub setup           # reopen detection and replace the saved selection
+runpub agents status   # inspect AI-agent integration
+```
+
+When one frontend and one backend are selected, their service names become the
+simple `frontend` and `backend` aliases. Multiple services with the same role
+use their folder names so every URL remains unambiguous. `runpub setup`
+preserves custom commands, ports, and environment mappings for services
+selected again by the same name or folder.
+
+Coding agents and CI can make the first-run choice without a prompt:
 
 ```bash
 runpub --services edison-web,backend --json
@@ -83,75 +172,24 @@ runpub --yes --json  # deliberately select every detected service
 runpub --services edison-web,backend --agents --json
 ```
 
-Use `--no-agents` to explicitly skip the agent integration in an automated
-setup. Non-interactive and `--json` setup never changes agent instructions
-unless `--agents` is present.
+Use `--no-agents` to explicitly skip agent integration in automated setup.
+Non-interactive and `--json` setup never changes agent instructions unless
+`--agents` is present.
 
-Natural shortcuts cover the common cases:
-
-```bash
-runpub frontend       # start one configured service
-runpub backend
-runpub all            # start every configured service
-runpub 3000           # expose an already-running port
-runpub status         # show public, local-only, and stopped services
-runpub stop           # stop this project's managed RunPub sessions
-runpub setup          # reopen detection and replace the saved selection
-runpub agents status  # inspect AI-agent integration
-```
-
-`runpub setup` preserves custom commands, ports, and environment mappings
-for services selected again by the same name or folder.
-
-The original explicit forms, such as `runpub run frontend` and `runpub
-expose 3000 --project demo --service frontend`, remain supported for scripts.
-
-## AI coding agents
-
-When the developer opts in, RunPub adds a small managed instruction block
-to the supported global instruction files:
-
-```text
-~/.codex/AGENTS.md       Codex and the ChatGPT coding agent
-~/.claude/CLAUDE.md      Claude Code
-~/.gemini/GEMINI.md      Antigravity
-```
-
-If Codex already uses `AGENTS.override.md`, RunPub updates that active file
-instead. Cursor stores its supported global User Rules in the application
-settings rather than a Markdown file, so RunPub creates the supported
-project rule `.cursor/rules/runpub.mdc` in each opted-in project.
-
-The instructions make RunPub the default launcher for interactive
-development servers, frontend previews, APIs, and webhook handlers. Its public
-HTTPS URL is the primary browser/test URL on the same computer as well as on
-remote devices. Agents check status first, reuse live tunnels, select one
-service or the complete stack, keep the process alive, and return the URL.
-Unit tests, builds, linters, one-off scripts, databases, admin/debug ports, and
-processes that do not need a browser-accessible URL are explicitly excluded.
-
-The installer preserves all existing text and owns only content between
-`<!-- runpub:managed:start -->` and `<!-- runpub:managed:end -->`. It is
-safe to run repeatedly. Existing projects can manage the integration directly:
+The explicit forms below remain supported for scripts:
 
 ```bash
-runpub agents install
-runpub agents status
-runpub agents remove
+runpub run frontend
+runpub expose 3000 --project demo --service frontend
 ```
 
-The CLI verifies the issued RunPub token before storing it in
-`~/.config/runpub/config.json` with private file permissions. For private or
-self-hosted installations, operator-issued token login remains available with
-`runpub login --server ... --account ... --token-file ...`.
-
-Expose an already-running backend:
+Expose an already-running backend directly:
 
 ```bash
 runpub expose 8000 --project edison-sourcing --service backend
 ```
 
-Or commit a `runpub.json` so one command starts and exposes a whole project:
+Or commit a `runpub.json` so one command starts and exposes the whole project:
 
 ```json
 {
@@ -175,12 +213,7 @@ Or commit a `runpub.json` so one command starts and exposes a whole project:
 }
 ```
 
-```bash
-runpub
-runpub frontend
-```
-
-This also works in npm scripts and with coding agents:
+This also works in npm scripts:
 
 ```json
 {
@@ -206,13 +239,127 @@ variable per configured service, such as `RUNPUB_FRONTEND_URL` and
 variables before launching the command, which lets a frontend point to its
 public development API without embedding an account-specific hostname.
 
-Auto-detection currently understands npm, pnpm, Yarn, and Bun projects using
-common development scripts; Vite, Next.js, React, Vue, Svelte, Angular, Nuxt,
-Astro, Gatsby, Express, NestJS, Fastify, Django, FastAPI, and Flask conventions;
-and conventional `frontend`/`backend`, `apps/*`, `packages/*`, and package
-manager workspace layouts. It also scans top-level application folders and
-asks the user to resolve ambiguous choices. Unusual repositories can run
-`runpub init` and edit the small generated file once.
+Auto-detection understands npm, pnpm, Yarn, and Bun projects using common
+development scripts; Vite, Next.js, React, Vue, Svelte, Angular, Nuxt, Astro,
+Gatsby, Express, NestJS, Fastify, Django, FastAPI, and Flask conventions; and
+conventional `frontend`/`backend`, `apps/*`, `packages/*`, and package-manager
+workspace layouts. It also scans top-level application folders and asks the
+user to resolve ambiguous choices. Unusual repositories can run `runpub init`
+and edit the generated file once.
+
+## AI coding agents
+
+When the developer opts in, RunPub adds a small managed instruction block to
+the supported global instruction files:
+
+```text
+~/.codex/AGENTS.md       Codex and the ChatGPT coding agent
+~/.claude/CLAUDE.md      Claude Code
+~/.gemini/GEMINI.md      Antigravity
+```
+
+If Codex already uses `AGENTS.override.md`, RunPub updates that active file
+instead. Cursor stores its global User Rules in application settings, so RunPub
+creates the supported project rule `.cursor/rules/runpub.mdc` in each opted-in
+project.
+
+These instructions make RunPub the default launcher for interactive development
+servers, frontend previews, APIs, and webhook handlers. Agents check status
+first, reuse live tunnels, choose one service or the complete stack, keep the
+process alive, and return the public URL. Unit tests, builds, linters, one-off
+scripts, databases, admin/debug ports, and processes that do not need a
+browser-accessible URL are explicitly excluded.
+
+The installer preserves existing text and owns only content between
+`<!-- runpub:managed:start -->` and `<!-- runpub:managed:end -->`. It is safe to
+run repeatedly:
+
+```bash
+runpub agents install
+runpub agents status
+runpub agents remove
+```
+
+The CLI verifies the issued RunPub token before storing it in
+`~/.config/runpub/config.json` with private file permissions. For private or
+self-hosted installations, operator-issued token login remains available with
+`runpub login --server ... --account ... --token-file ...`.
+
+## Frequently asked questions
+
+### What is RunPub?
+
+RunPub is an open-source, project-aware localhost tunnel and global CLI. It
+starts local development services and gives each frontend, API, or webhook
+handler a stable public HTTPS URL under `runpublic.dev`.
+
+### How do I open localhost on my phone?
+
+Install RunPub on the computer running the project, sign in once, and run
+`runpub` inside the repository. Open the printed `https://...runpublic.dev` URL
+on the phone. The devices do not need to share a local network.
+
+### Can Codex or Claude use RunPub automatically?
+
+Yes. Choose the AI-agent option during first-run setup or run `runpub agents
+install`. Supported agents are instructed to use RunPub for interactive local
+frontends, APIs, and webhooks, keep it running, and return the public URL.
+
+### Does RunPub replace repeated ngrok setup?
+
+For the normal local-development loop, yes: configure the project once and use
+`runpub` on later sessions instead of separately starting, naming, and wiring a
+tunnel for every service. RunPub does not attempt to reproduce every traffic
+inspection, access-policy, or production feature of a general tunnel platform.
+
+### Does RunPub handle frontend and backend services together?
+
+Yes. `runpub all` starts every selected service. RunPub exposes each service at
+its own hostname and provides cross-service URL variables so the frontend can
+be configured to call the backend.
+
+### Can I use a RunPub URL for a webhook or OAuth callback?
+
+Yes. The public HTTPS URL forwards requests to the local handler while the
+tunnel is running, solving the fact that external providers cannot call your
+computer's `localhost`. The provider still needs to accept the hostname and
+your app must validate webhook signatures, OAuth state, and authentication as
+usual.
+
+### Is the URL permanent?
+
+The hostname is stable and reserved for the same account/project/service tuple;
+the local app behind it is reachable only while your computer, service, and
+RunPub are online.
+
+### Do developers need their own Cloudflare account or domain?
+
+No. The RunPub operator owns the domain and Cloudflare infrastructure. A
+developer installs the CLI and signs in with GitHub.
+
+### Is a RunPub URL private?
+
+No. HTTPS encrypts traffic in transit, but the hostname is publicly reachable.
+Keep application authentication enabled and never expose databases, admin
+ports, debuggers, or secret-bearing services.
+
+### Is RunPub production hosting?
+
+No. RunPub publishes a process running on your development computer. Use a
+production hosting platform for an always-on production application.
+
+## Package and compatibility
+
+RunPub is the product, npm package, CLI, GitHub repository, manifest, and
+environment-variable prefix. The hosted domain intentionally remains
+`runpublic.dev`, so existing public URLs do not change. The former `runpublic`
+command, `runpublic.json`, `RUNPUBLIC_*` variables, local credential store, and
+tunnel API paths remain supported as migration aliases; new projects should use
+the shorter names.
+
+During source development, clone this repository and run `npm install -g .`.
+Pass `--account your-name` on the first login when you want a specific available
+namespace; otherwise RunPub starts from your GitHub username.
 
 ## How it works
 
