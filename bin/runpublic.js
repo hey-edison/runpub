@@ -1,5 +1,4 @@
 #!/usr/bin/env node
 
-import { runCli } from '../src/cli.js';
-
-process.exitCode = await runCli();
+// Compatibility alias retained for existing npm scripts and agent instructions.
+await import('./runpub.js');

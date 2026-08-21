@@ -21,9 +21,18 @@ const HOP_BY_HOP = new Set([
   'upgrade',
 ]);
 
+function envValue(env, name) {
+  const legacyName = name.replace(/^RUNPUB_/, 'RUNPUBLIC_');
+  return env[name] ?? env[legacyName];
+}
+
 function envInteger(env, name, fallback) {
-  const value = Number(env[name]);
+  const value = Number(envValue(env, name));
   return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function canonicalApiPath(pathname) {
+  return pathname.replace(/^\/(?:_runpublic|_devpublic)(?=\/|$)/, '/_runpub');
 }
 
 function responseHeaders(extra = {}) {
@@ -56,14 +65,14 @@ function text(message, status = 200, extraHeaders = {}) {
 }
 
 function landingPage(domain) {
-  const repository = 'https://github.com/hey-edison/runpublic';
+  const repository = 'https://github.com/hey-edison/runpub';
   return new Response(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Stable public HTTPS URLs for local frontend, backend, and webhook development.">
-  <title>RunPublic — localhost, publicly reachable</title>
+  <title>RunPub — localhost, publicly reachable</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -81,12 +90,12 @@ function landingPage(domain) {
 </head>
 <body>
   <main>
-    <div class="eyebrow">RunPublic</div>
+    <div class="eyebrow">RunPub</div>
     <h1>localhost, publicly reachable.</h1>
     <p>Give every local frontend, API, and webhook a stable HTTPS URL. Install one CLI, sign in with GitHub, and keep your Cloudflare setup out of every developer's way.</p>
-    <pre><code>npm install --global runpublic
-runpublic login
-runpublic expose 3000 --project my-app --service frontend</code></pre>
+    <pre><code>npm install --global runpub
+runpub login
+runpub expose 3000 --project my-app --service frontend</code></pre>
     <nav>
       <a class="primary" href="${repository}">View on GitHub</a>
       <a href="${repository}/#readme">Read the docs</a>
@@ -114,10 +123,10 @@ function normalizeDomain(value) {
     .replace(/^https?:\/\//, '')
     .replace(/^\.+|\.+$/g, '')
     .split('/')[0];
-  if (!domain || domain.length > 253) throw new Error('RUNPUBLIC_DOMAIN is invalid');
+  if (!domain || domain.length > 253) throw new Error('RUNPUB_DOMAIN is invalid');
   const labels = domain.split('.');
   if (labels.some((label) => !NAME_PATTERN.test(label))) {
-    throw new Error('RUNPUBLIC_DOMAIN is invalid');
+    throw new Error('RUNPUB_DOMAIN is invalid');
   }
   return domain;
 }
@@ -179,7 +188,7 @@ function bearerToken(request) {
 
 async function authenticate(request, env) {
   const token = bearerToken(request);
-  if (!token) throw new RequestError('UNAUTHORIZED', 'A RunPublic token is required', 401);
+  if (!token) throw new RequestError('UNAUTHORIZED', 'A RunPub token is required', 401);
   const tokenHash = await sha256(token);
   const row = await env.DB.prepare(
     `SELECT a.id, a.slug, a.status, a.max_services AS maxServices,
@@ -192,7 +201,7 @@ async function authenticate(request, env) {
     .bind(tokenHash)
     .first();
   if (!row || row.status !== 'active') {
-    throw new RequestError('UNAUTHORIZED', 'The RunPublic token is invalid or revoked', 401);
+    throw new RequestError('UNAUTHORIZED', 'The RunPub token is invalid or revoked', 401);
   }
   return row;
 }
@@ -270,13 +279,14 @@ async function parseSmallJson(request) {
 }
 
 async function requireAdmin(request, env) {
-  if (!env.RUNPUBLIC_ADMIN_SECRET) {
+  const adminSecret = envValue(env, 'RUNPUB_ADMIN_SECRET');
+  if (!adminSecret) {
     throw new RequestError('NOT_FOUND', 'Not found', 404);
   }
   const supplied = bearerToken(request);
   const [left, right] = await Promise.all([
     sha256(supplied || 'missing'),
-    sha256(env.RUNPUBLIC_ADMIN_SECRET),
+    sha256(adminSecret),
   ]);
   if (left !== right) throw new RequestError('UNAUTHORIZED', 'Invalid admin credential', 401);
 }
@@ -386,15 +396,15 @@ async function listAccounts(env) {
 
 async function handleAdmin(request, env, path) {
   await requireAdmin(request, env);
-  if (path === '/_runpublic/admin/accounts') {
+  if (path === '/_runpub/admin/accounts') {
     if (request.method === 'POST') return createAccount(request, env);
     if (request.method === 'GET') return listAccounts(env);
   }
-  const tokenCollection = /^\/_runpublic\/admin\/accounts\/([^/]+)\/tokens$/.exec(path);
+  const tokenCollection = /^\/_runpub\/admin\/accounts\/([^/]+)\/tokens$/.exec(path);
   if (tokenCollection && request.method === 'POST') {
     return createAccountToken(request, env, decodeURIComponent(tokenCollection[1]));
   }
-  const tokenItem = /^\/_runpublic\/admin\/accounts\/([^/]+)\/tokens\/([^/]+)$/.exec(path);
+  const tokenItem = /^\/_runpub\/admin\/accounts\/([^/]+)\/tokens\/([^/]+)$/.exec(path);
   if (tokenItem && request.method === 'DELETE') {
     return revokeAccountToken(
       env,
@@ -421,7 +431,8 @@ async function handleMe(request, env) {
 }
 
 function githubAuthEnabled(env) {
-  return env.RUNPUBLIC_SIGNUPS_ENABLED === 'true' && Boolean(env.RUNPUBLIC_GITHUB_CLIENT_ID);
+  return envValue(env, 'RUNPUB_SIGNUPS_ENABLED') === 'true' &&
+    Boolean(envValue(env, 'RUNPUB_GITHUB_CLIENT_ID'));
 }
 
 async function githubFormRequest(url, fields) {
@@ -432,7 +443,7 @@ async function githubFormRequest(url, fields) {
       headers: {
         accept: 'application/json',
         'content-type': 'application/x-www-form-urlencoded',
-        'user-agent': 'runpublic-edge',
+        'user-agent': 'runpub-edge',
       },
       body: new URLSearchParams(fields).toString(),
     });
@@ -451,7 +462,7 @@ async function startGithubDeviceLogin(env) {
     throw new RequestError('SIGNUP_UNAVAILABLE', 'GitHub sign-in is not configured', 503);
   }
   const payload = await githubFormRequest('https://github.com/login/device/code', {
-    client_id: env.RUNPUBLIC_GITHUB_CLIENT_ID,
+    client_id: envValue(env, 'RUNPUB_GITHUB_CLIENT_ID'),
   });
   if (!payload.device_code || !payload.user_code || !payload.verification_uri) {
     throw new RequestError('GITHUB_UNAVAILABLE', 'GitHub returned an invalid login response', 502);
@@ -472,7 +483,7 @@ async function githubUser(accessToken) {
       headers: {
         accept: 'application/vnd.github+json',
         authorization: `Bearer ${accessToken}`,
-        'user-agent': 'runpublic-edge',
+        'user-agent': 'runpub-edge',
         'x-github-api-version': GITHUB_API_VERSION,
       },
     });
@@ -505,7 +516,7 @@ async function accountForGithub(env, user, requestedSlug) {
       ];
   const maxServices = envInteger(
     env,
-    'RUNPUBLIC_FREE_MAX_SERVICES',
+    'RUNPUB_FREE_MAX_SERVICES',
     DEFAULT_FREE_MAX_SERVICES,
   );
 
@@ -534,8 +545,8 @@ async function accountForGithub(env, user, requestedSlug) {
   throw new RequestError(
     'ACCOUNT_CONFLICT',
     explicitSlug
-      ? `The RunPublic account name "${explicitSlug}" is already reserved`
-      : 'Could not reserve a RunPublic account name',
+      ? `The RunPub account name "${explicitSlug}" is already reserved`
+      : 'Could not reserve a RunPub account name',
     409,
   );
 }
@@ -578,7 +589,7 @@ async function pollGithubDeviceLogin(request, env) {
     throw new RequestError('INVALID_DEVICE_CODE', 'The GitHub device code is invalid', 400);
   }
   const payload = await githubFormRequest('https://github.com/login/oauth/access_token', {
-    client_id: env.RUNPUBLIC_GITHUB_CLIENT_ID,
+    client_id: envValue(env, 'RUNPUB_GITHUB_CLIENT_ID'),
     device_code: deviceCode,
     grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
   });
@@ -593,7 +604,7 @@ async function pollGithubDeviceLogin(request, env) {
       access_denied: 'GitHub sign-in was cancelled',
       expired_token: 'The GitHub device code expired; run login again',
       incorrect_device_code: 'The GitHub device code is invalid',
-      device_flow_disabled: 'GitHub device login is not enabled for RunPublic',
+      device_flow_disabled: 'GitHub device login is not enabled for RunPub',
     };
     throw new RequestError(
       'GITHUB_LOGIN_FAILED',
@@ -640,14 +651,14 @@ async function handleAgentConnect(request, env, executionContext, domain) {
   const id = env.TUNNELS.idFromName(hostname);
   const stub = env.TUNNELS.get(id);
   const headers = new Headers(request.headers);
-  headers.set('x-runpublic-role', 'agent');
-  headers.set('x-runpublic-account', account.slug);
-  headers.set('x-runpublic-project', project);
-  headers.set('x-runpublic-service', service);
-  headers.set('x-runpublic-hostname', hostname);
+  headers.set('x-runpub-role', 'agent');
+  headers.set('x-runpub-account', account.slug);
+  headers.set('x-runpub-project', project);
+  headers.set('x-runpub-service', service);
+  headers.set('x-runpub-hostname', hostname);
   headers.delete('authorization');
   return stub.fetch(
-    new Request('https://tunnel.internal/_runpublic/connect', {
+    new Request('https://tunnel.internal/_runpub/connect', {
       method: 'GET',
       headers,
     }),
@@ -661,12 +672,17 @@ function isPublicHostname(hostname, domain) {
 export default {
   async fetch(request, env, executionContext) {
     try {
-      const domain = normalizeDomain(env.RUNPUBLIC_DOMAIN);
+      const domain = normalizeDomain(envValue(env, 'RUNPUB_DOMAIN'));
       const url = new URL(request.url);
+      const apiPath = canonicalApiPath(url.pathname);
+      const developmentMode = envValue(env, 'RUNPUB_DEV_MODE') === 'true';
       const developmentHostname =
-        env.RUNPUBLIC_DEV_MODE === 'true' ? request.headers.get('x-runpublic-test-host') : '';
+        developmentMode
+          ? request.headers.get('x-runpub-test-host') ||
+            request.headers.get('x-runpublic-test-host')
+          : '';
       const developmentApiHostname =
-        env.RUNPUBLIC_DEV_MODE === 'true' && url.pathname.startsWith('/_runpublic/')
+        developmentMode && apiPath.startsWith('/_runpub/')
           ? `edge.${domain}`
           : '';
       const hostname = String(developmentHostname || developmentApiHostname || url.hostname)
@@ -679,33 +695,33 @@ export default {
       }
 
       if (hostname === edgeHostname && (url.pathname === '/health' || url.pathname === '/healthz')) {
-        return json({ status: 'ok', architecture: 'durable-objects', version: '0.2.0' });
+        return json({ status: 'ok', architecture: 'durable-objects', version: '0.6.0' });
       }
-      if (hostname === edgeHostname && url.pathname === '/_runpublic/me') {
+      if (hostname === edgeHostname && apiPath === '/_runpub/me') {
         return await handleMe(request, env);
       }
       if (
         hostname === edgeHostname &&
         request.method === 'POST' &&
-        url.pathname === '/_runpublic/auth/github/device/start'
+        apiPath === '/_runpub/auth/github/device/start'
       ) {
         return await startGithubDeviceLogin(env);
       }
       if (
         hostname === edgeHostname &&
         request.method === 'POST' &&
-        url.pathname === '/_runpublic/auth/github/device/poll'
+        apiPath === '/_runpub/auth/github/device/poll'
       ) {
         return await pollGithubDeviceLogin(request, env);
       }
-      if (hostname === edgeHostname && url.pathname.startsWith('/_runpublic/admin/')) {
-        return await handleAdmin(request, env, url.pathname);
+      if (hostname === edgeHostname && apiPath.startsWith('/_runpub/admin/')) {
+        return await handleAdmin(request, env, apiPath);
       }
-      if (hostname === edgeHostname && url.pathname === '/_runpublic/connect') {
+      if (hostname === edgeHostname && apiPath === '/_runpub/connect') {
         return await handleAgentConnect(request, env, executionContext, domain);
       }
       if (!isPublicHostname(hostname, domain) || hostname === edgeHostname) {
-        return errorResponse('NOT_FOUND', 'RunPublic endpoint not found', 404);
+        return errorResponse('NOT_FOUND', 'RunPub endpoint not found', 404);
       }
 
       const stub = env.TUNNELS.get(env.TUNNELS.idFromName(hostname));
@@ -715,7 +731,7 @@ export default {
         return errorResponse(error.code, error.message, error.status);
       }
       console.error(JSON.stringify({ event: 'worker_error', message: String(error?.message || error) }));
-      return errorResponse('INTERNAL_ERROR', 'RunPublic could not process this request', 500);
+      return errorResponse('INTERNAL_ERROR', 'RunPub could not process this request', 500);
     }
   },
 };
@@ -743,6 +759,7 @@ function safeHeaders(value) {
       }
     }
   }
+  result.set('x-runpub-edge', 'cloudflare');
   result.set('x-runpublic-edge', 'cloudflare');
   return result;
 }
@@ -816,7 +833,7 @@ export class TunnelSession {
   }
 
   async fetch(request) {
-    const role = request.headers.get('x-runpublic-role');
+    const role = request.headers.get('x-runpub-role') || request.headers.get('x-runpublic-role');
     if (role === 'agent') return this.acceptAgent(request);
     if ((request.headers.get('upgrade') || '').toLowerCase() === 'websocket') {
       return this.acceptPublicWebSocket(request);
@@ -826,25 +843,25 @@ export class TunnelSession {
 
   limits() {
     return {
-      bodyBytes: envInteger(this.env, 'RUNPUBLIC_MAX_BODY_BYTES', DEFAULT_BODY_LIMIT),
+      bodyBytes: envInteger(this.env, 'RUNPUB_MAX_BODY_BYTES', DEFAULT_BODY_LIMIT),
       timeoutMs: envInteger(
         this.env,
-        'RUNPUBLIC_REQUEST_TIMEOUT_MS',
+        'RUNPUB_REQUEST_TIMEOUT_MS',
         DEFAULT_REQUEST_TIMEOUT_MS,
       ),
       pendingRequests: envInteger(
         this.env,
-        'RUNPUBLIC_MAX_PENDING_REQUESTS',
+        'RUNPUB_MAX_PENDING_REQUESTS',
         DEFAULT_MAX_PENDING_REQUESTS,
       ),
       publicWebSockets: envInteger(
         this.env,
-        'RUNPUBLIC_MAX_PUBLIC_WEBSOCKETS',
+        'RUNPUB_MAX_PUBLIC_WEBSOCKETS',
         DEFAULT_MAX_PUBLIC_WEBSOCKETS,
       ),
       requestsPerMinute: envInteger(
         this.env,
-        'RUNPUBLIC_REQUESTS_PER_MINUTE',
+        'RUNPUB_REQUESTS_PER_MINUTE',
         DEFAULT_REQUESTS_PER_MINUTE,
       ),
     };
@@ -860,13 +877,13 @@ export class TunnelSession {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const existing = this.activeAgent();
-    if (existing) existing.close(1012, 'Replaced by a newer RunPublic connection');
+    if (existing) existing.close(1012, 'Replaced by a newer RunPub connection');
     const attachment = {
       role: 'agent',
-      account: request.headers.get('x-runpublic-account'),
-      project: request.headers.get('x-runpublic-project'),
-      service: request.headers.get('x-runpublic-service'),
-      hostname: request.headers.get('x-runpublic-hostname'),
+      account: request.headers.get('x-runpub-account') || request.headers.get('x-runpublic-account'),
+      project: request.headers.get('x-runpub-project') || request.headers.get('x-runpublic-project'),
+      service: request.headers.get('x-runpub-service') || request.headers.get('x-runpublic-service'),
+      hostname: request.headers.get('x-runpub-hostname') || request.headers.get('x-runpublic-hostname'),
     };
     server.serializeAttachment(attachment);
     this.state.acceptWebSocket(server, ['agent']);
@@ -899,17 +916,17 @@ export class TunnelSession {
 
   async forwardHttp(request) {
     const agent = this.activeAgent();
-    if (!agent) return text('No active RunPublic tunnel for this hostname', 404);
+    if (!agent) return text('No active RunPub tunnel for this hostname', 404);
     if (!this.allowRequest()) {
-      return text('RunPublic rate limit exceeded', 429, { 'retry-after': '60' });
+      return text('RunPub rate limit exceeded', 429, { 'retry-after': '60' });
     }
     const limits = this.limits();
     if (this.pending.size >= limits.pendingRequests) {
-      return text('RunPublic tunnel is busy', 503, { 'retry-after': '1' });
+      return text('RunPub tunnel is busy', 503, { 'retry-after': '1' });
     }
     const contentLength = Number(request.headers.get('content-length'));
     if (Number.isFinite(contentLength) && contentLength > limits.bodyBytes) {
-      return text('Request body exceeded the RunPublic limit', 413);
+      return text('Request body exceeded the RunPub limit', 413);
     }
 
     const id = crypto.randomUUID();
@@ -920,7 +937,7 @@ export class TunnelSession {
       resolveStart = resolve;
     });
     const timer = setTimeout(() => {
-      this.failPending(id, 504, 'RunPublic tunnel request timed out');
+      this.failPending(id, 504, 'RunPub tunnel request timed out');
       this.sendAgent({ type: 'http_cancel', id });
     }, limits.timeoutMs);
     this.pending.set(id, {
@@ -942,7 +959,7 @@ export class TunnelSession {
       path: `${new URL(request.url).pathname}${new URL(request.url).search}`,
       headers: requestHeaders(request),
     })) {
-      this.failPending(id, 502, 'RunPublic tunnel disconnected');
+      this.failPending(id, 502, 'RunPub tunnel disconnected');
       return start;
     }
 
@@ -969,8 +986,8 @@ export class TunnelSession {
           if (done) break;
           total += value.byteLength;
           if (total > maxBytes) {
-            await reader.cancel('RunPublic body limit exceeded');
-            this.failPending(id, 413, 'Request body exceeded the RunPublic limit');
+            await reader.cancel('RunPub body limit exceeded');
+            this.failPending(id, 413, 'Request body exceeded the RunPub limit');
             this.sendAgent({ type: 'http_cancel', id });
             return;
           }
@@ -978,7 +995,7 @@ export class TunnelSession {
             if (!this.pending.has(id)) return;
             const chunk = value.subarray(offset, offset + STREAM_CHUNK_BYTES);
             if (!this.sendAgent({ type: 'http_request_chunk', id, data: base64Encode(chunk) })) {
-              this.failPending(id, 502, 'RunPublic tunnel disconnected');
+              this.failPending(id, 502, 'RunPub tunnel disconnected');
               return;
             }
           }
@@ -993,10 +1010,10 @@ export class TunnelSession {
 
   acceptPublicWebSocket(request) {
     const agent = this.activeAgent();
-    if (!agent) return text('No active RunPublic tunnel for this hostname', 404);
-    if (!this.allowRequest()) return text('RunPublic rate limit exceeded', 429);
+    if (!agent) return text('No active RunPub tunnel for this hostname', 404);
+    if (!this.allowRequest()) return text('RunPub rate limit exceeded', 429);
     if (this.publicSockets.size >= this.limits().publicWebSockets) {
-      return text('RunPublic WebSocket limit exceeded', 503);
+      return text('RunPub WebSocket limit exceeded', 503);
     }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -1049,7 +1066,7 @@ export class TunnelSession {
     if (attachment.role === 'public') {
       const bytes = typeof raw === 'string' ? new TextEncoder().encode(raw) : new Uint8Array(raw);
       if (bytes.byteLength > this.limits().bodyBytes) {
-        socket.close(1009, 'Message exceeded RunPublic limit');
+        socket.close(1009, 'Message exceeded RunPub limit');
         return;
       }
       this.sendAgent({
@@ -1088,7 +1105,7 @@ export class TunnelSession {
       const chunk = base64Decode(message.data);
       pending.totalResponseBytes += chunk.byteLength;
       if (pending.totalResponseBytes > this.limits().bodyBytes) {
-        this.failPending(id, 502, 'Tunnel response exceeded the RunPublic limit');
+        this.failPending(id, 502, 'Tunnel response exceeded the RunPub limit');
         this.sendAgent({ type: 'http_cancel', id });
         return;
       }
@@ -1116,7 +1133,7 @@ export class TunnelSession {
       if (!target || target.readyState !== 1) return;
       const bytes = base64Decode(message.data);
       if (bytes.byteLength > this.limits().bodyBytes) {
-        target.close(1009, 'Message exceeded RunPublic limit');
+        target.close(1009, 'Message exceeded RunPub limit');
         return;
       }
       target.send(message.binary ? bytes.buffer : new TextDecoder().decode(bytes));
@@ -1169,10 +1186,10 @@ export class TunnelSession {
       if (socket !== this.agent) return;
       this.agent = null;
       for (const id of [...this.pending.keys()]) {
-        this.failPending(id, 502, 'RunPublic tunnel disconnected');
+        this.failPending(id, 502, 'RunPub tunnel disconnected');
       }
       for (const [id, publicSocket] of this.publicSockets) {
-        publicSocket.close(1012, 'RunPublic tunnel disconnected');
+        publicSocket.close(1012, 'RunPub tunnel disconnected');
         this.publicSockets.delete(id);
       }
       console.log(JSON.stringify({ event: 'tunnel_offline', code, reason }));

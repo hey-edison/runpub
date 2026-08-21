@@ -1,6 +1,6 @@
 {
-  "name": "runpublic",
-  "version": "0.5.0",
+  "name": "runpub",
+  "version": "0.6.0",
   "description": "Project-aware public HTTPS URLs for local development services",
   "type": "module",
   "main": "./src/tunnel-client.js",
@@ -10,6 +10,8 @@
     "./naming": "./src/naming.js"
   },
   "bin": {
+    "runpub": "./bin/runpub.js",
+    "runpub-edge": "./bin/runpub-edge.js",
     "runpublic": "./bin/runpublic.js",
     "runpublic-edge": "./bin/runpublic-edge.js",
     "devpublic": "./bin/devpublic.js",
@@ -18,6 +20,7 @@
   "files": [
     "bin",
     "src",
+    "runpub.schema.json",
     "runpublic.schema.json",
     "devpublic.schema.json",
     "README.md",
@@ -28,7 +31,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "start:edge": "node ./bin/runpublic-edge.js",
+    "start:edge": "node ./bin/runpub-edge.js",
     "test": "node --test",
     "test:e2e": "node --test test/e2e.test.js",
     "check": "node --check cloudflare/src/worker.js && node --check src/agent-instructions.js && node --check src/cli.js && node --check src/config.js && node --check src/detect.js && node --check src/process-state.js && node --check src/tunnel-client.js && node --check src/edge-server.js && node --check src/naming.js && node --check src/proxy-headers.js && npm test && npm pack --dry-run",
@@ -51,12 +54,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hey-edison/runpublic.git"
+    "url": "git+https://github.com/hey-edison/runpub.git"
   },
   "bugs": {
-    "url": "https://github.com/hey-edison/runpublic/issues"
+    "url": "https://github.com/hey-edison/runpub/issues"
   },
-  "homepage": "https://github.com/hey-edison/runpublic#readme",
+  "homepage": "https://github.com/hey-edison/runpub#readme",
   "engines": {
     "node": ">=20"
   },

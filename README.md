@@ -1,6 +1,6 @@
-# RunPublic
+# RunPub
 
-RunPublic gives local frontends, APIs, and webhook handlers stable public HTTPS
+RunPub gives local frontends, APIs, and webhook handlers stable public HTTPS
 URLs from one global CLI.
 
 ```text
@@ -8,51 +8,58 @@ https://fullstack-demo-frontend-keshavmac.runpublic.dev
 https://fullstack-demo-backend-keshavmac.runpublic.dev
 ```
 
-The developer runs one command. RunPublic opens an authenticated outbound
+The developer runs one command. RunPub opens an authenticated outbound
 tunnel, so no router configuration, inbound firewall rule, TLS certificate, or
 developer-owned Cloudflare account is required.
 
-> **Public beta:** a RunPublic URL exposes a process on your computer to the
+> **Public beta:** a RunPub URL exposes a process on your computer to the
 > Internet. Never expose a database, admin port, secrets dashboard, or service
 > containing sensitive data without appropriate application authentication.
 
 ## Install and use
 
-RunPublic requires Node.js 20 or newer. Install the CLI globally:
+RunPub requires Node.js 20 or newer. Install the CLI globally:
 
 ```bash
-npm install --global runpublic
+npm install --global runpub
 ```
+
+RunPub is the product, npm package, CLI, GitHub repository, manifest, and
+environment-variable prefix. The hosted domain intentionally remains
+`runpublic.dev`, so existing public URLs do not change. The former `runpublic`
+command, `runpublic.json`, `RUNPUBLIC_*` variables, local credential store, and
+tunnel API paths remain supported as migration aliases; new projects should use
+the shorter names.
 
 During source development, clone this repository and run `npm install -g .`.
 Sign in once with GitHub. The device flow asks only for your public GitHub
-identity and creates a unique RunPublic namespace automatically:
+identity and creates a unique RunPub namespace automatically:
 
 ```bash
-runpublic login
+runpub login
 ```
 
 Pass `--account your-name` on the first login when you want a specific available
-namespace; otherwise RunPublic starts from your GitHub username.
+namespace; otherwise RunPub starts from your GitHub username.
 
 Then enter a project and run one command:
 
 ```bash
-runpublic
+runpub
 ```
 
 On the first run, the CLI detects common Node.js and Python development
-services, writes `runpublic.json`, starts them, and prints their stable HTTPS
+services, writes `runpub.json`, starts them, and prints their stable HTTPS
 URLs. Later runs reuse that file. Framework hot reload keeps working, so saving
-source code does not require restarting RunPublic. Interactive setup also asks
-whether AI coding agents should use RunPublic by default whenever they start an
+source code does not require restarting RunPub. Interactive setup also asks
+whether AI coding agents should use RunPub by default whenever they start an
 interactive development server. The default answer to this opt-in is no.
 
-If a repository contains several possible applications, RunPublic asks once
+If a repository contains several possible applications, RunPub asks once
 instead of guessing:
 
 ```text
-RunPublic found several development services:
+RunPub found several development services:
 
   1. backend — FastAPI backend — python3 -m uvicorn ... — port 8000
   2. careers-web — Node.js frontend — npm run dev — port 3000
@@ -71,9 +78,9 @@ same role uses their folder names so every URL remains unambiguous.
 Coding agents and CI can make the same choice without an interactive prompt:
 
 ```bash
-runpublic --services edison-web,backend --json
-runpublic --yes --json  # deliberately select every detected service
-runpublic --services edison-web,backend --agents --json
+runpub --services edison-web,backend --json
+runpub --yes --json  # deliberately select every detected service
+runpub --services edison-web,backend --agents --json
 ```
 
 Use `--no-agents` to explicitly skip the agent integration in an automated
@@ -83,25 +90,25 @@ unless `--agents` is present.
 Natural shortcuts cover the common cases:
 
 ```bash
-runpublic frontend       # start one configured service
-runpublic backend
-runpublic all            # start every configured service
-runpublic 3000           # expose an already-running port
-runpublic status         # show public, local-only, and stopped services
-runpublic stop           # stop this project's managed RunPublic sessions
-runpublic setup          # reopen detection and replace the saved selection
-runpublic agents status  # inspect AI-agent integration
+runpub frontend       # start one configured service
+runpub backend
+runpub all            # start every configured service
+runpub 3000           # expose an already-running port
+runpub status         # show public, local-only, and stopped services
+runpub stop           # stop this project's managed RunPub sessions
+runpub setup          # reopen detection and replace the saved selection
+runpub agents status  # inspect AI-agent integration
 ```
 
-`runpublic setup` preserves custom commands, ports, and environment mappings
+`runpub setup` preserves custom commands, ports, and environment mappings
 for services selected again by the same name or folder.
 
-The original explicit forms, such as `runpublic run frontend` and `runpublic
+The original explicit forms, such as `runpub run frontend` and `runpub
 expose 3000 --project demo --service frontend`, remain supported for scripts.
 
 ## AI coding agents
 
-When the developer opts in, RunPublic adds a small managed instruction block
+When the developer opts in, RunPub adds a small managed instruction block
 to the supported global instruction files:
 
 ```text
@@ -110,12 +117,12 @@ to the supported global instruction files:
 ~/.gemini/GEMINI.md      Antigravity
 ```
 
-If Codex already uses `AGENTS.override.md`, RunPublic updates that active file
+If Codex already uses `AGENTS.override.md`, RunPub updates that active file
 instead. Cursor stores its supported global User Rules in the application
-settings rather than a Markdown file, so RunPublic creates the supported
-project rule `.cursor/rules/runpublic.mdc` in each opted-in project.
+settings rather than a Markdown file, so RunPub creates the supported
+project rule `.cursor/rules/runpub.mdc` in each opted-in project.
 
-The instructions make RunPublic the default launcher for interactive
+The instructions make RunPub the default launcher for interactive
 development servers, frontend previews, APIs, and webhook handlers. Its public
 HTTPS URL is the primary browser/test URL on the same computer as well as on
 remote devices. Agents check status first, reuse live tunnels, select one
@@ -124,31 +131,31 @@ Unit tests, builds, linters, one-off scripts, databases, admin/debug ports, and
 processes that do not need a browser-accessible URL are explicitly excluded.
 
 The installer preserves all existing text and owns only content between
-`<!-- runpublic:managed:start -->` and `<!-- runpublic:managed:end -->`. It is
+`<!-- runpub:managed:start -->` and `<!-- runpub:managed:end -->`. It is
 safe to run repeatedly. Existing projects can manage the integration directly:
 
 ```bash
-runpublic agents install
-runpublic agents status
-runpublic agents remove
+runpub agents install
+runpub agents status
+runpub agents remove
 ```
 
-The CLI verifies the issued RunPublic token before storing it in
-`~/.config/runpublic/config.json` with private file permissions. For private or
+The CLI verifies the issued RunPub token before storing it in
+`~/.config/runpub/config.json` with private file permissions. For private or
 self-hosted installations, operator-issued token login remains available with
-`runpublic login --server ... --account ... --token-file ...`.
+`runpub login --server ... --account ... --token-file ...`.
 
 Expose an already-running backend:
 
 ```bash
-runpublic expose 8000 --project edison-sourcing --service backend
+runpub expose 8000 --project edison-sourcing --service backend
 ```
 
-Or commit a `runpublic.json` so one command starts and exposes a whole project:
+Or commit a `runpub.json` so one command starts and exposes a whole project:
 
 ```json
 {
-  "$schema": "./node_modules/runpublic/runpublic.schema.json",
+  "$schema": "./node_modules/runpub/runpub.schema.json",
   "project": "ai-native-ats",
   "services": {
     "frontend": {
@@ -156,7 +163,7 @@ Or commit a `runpublic.json` so one command starts and exposes a whole project:
       "port": 3000,
       "cwd": "edison-web",
       "env": {
-        "NEXT_PUBLIC_API_BASE": "${RUNPUBLIC_BACKEND_URL}/api/v1"
+        "NEXT_PUBLIC_API_BASE": "${RUNPUB_BACKEND_URL}/api/v1"
       }
     },
     "backend": {
@@ -169,8 +176,8 @@ Or commit a `runpublic.json` so one command starts and exposes a whole project:
 ```
 
 ```bash
-runpublic
-runpublic frontend
+runpub
+runpub frontend
 ```
 
 This also works in npm scripts and with coding agents:
@@ -178,7 +185,7 @@ This also works in npm scripts and with coding agents:
 ```json
 {
   "scripts": {
-    "public": "runpublic"
+    "public": "runpub"
   }
 }
 ```
@@ -193,9 +200,9 @@ Long names receive a stable 128-bit hash suffix and remain within DNS limits.
 The hosted edge permanently reserves the full account/project/service tuple and
 hostname in its database.
 
-Every started process receives `RUNPUBLIC_URL` for its own public URL and one
-variable per configured service, such as `RUNPUBLIC_FRONTEND_URL` and
-`RUNPUBLIC_BACKEND_URL`. The optional service `env` mapping expands these
+Every started process receives `RUNPUB_URL` for its own public URL and one
+variable per configured service, such as `RUNPUB_FRONTEND_URL` and
+`RUNPUB_BACKEND_URL`. The optional service `env` mapping expands these
 variables before launching the command, which lets a frontend point to its
 public development API without embedding an account-specific hostname.
 
@@ -205,7 +212,7 @@ Astro, Gatsby, Express, NestJS, Fastify, Django, FastAPI, and Flask conventions;
 and conventional `frontend`/`backend`, `apps/*`, `packages/*`, and package
 manager workspace layouts. It also scans top-level application folders and
 asks the user to resolve ambiguous choices. Unusual repositories can run
-`runpublic init` and edit the small generated file once.
+`runpub init` and edit the small generated file once.
 
 ## How it works
 
@@ -234,29 +241,29 @@ Install dependencies and start the Node edge:
 
 ```bash
 npm install
-RUNPUBLIC_DOMAIN=runpublic.test \
-RUNPUBLIC_TOKENS_JSON='{"keshavmac":"local-secret"}' \
-RUNPUBLIC_PUBLIC_SCHEME=http \
-RUNPUBLIC_PUBLIC_PORT=8080 \
+RUNPUB_DOMAIN=runpub.test \
+RUNPUB_TOKENS_JSON='{"keshavmac":"local-secret"}' \
+RUNPUB_PUBLIC_SCHEME=http \
+RUNPUB_PUBLIC_PORT=8080 \
 npm run start:edge
 ```
 
 In another terminal:
 
 ```bash
-runpublic login \
+runpub login \
   --server http://localhost:8080 \
   --account keshavmac \
   --token local-secret
 cd examples/fullstack
-runpublic
+runpub
 ```
 
 The `.test` domain does not resolve publicly. Exercise the route with an
 explicit host header:
 
 ```bash
-curl -H 'Host: fullstack-demo-backend-keshavmac.runpublic.test' \
+curl -H 'Host: fullstack-demo-backend-keshavmac.runpub.test' \
   http://127.0.0.1:8080/api/hello
 ```
 
@@ -301,7 +308,7 @@ See [SECURITY.md](SECURITY.md) for private reporting and safe-testing rules,
 
 ## Open source and feedback
 
-RunPublic is MIT-licensed. Bugs, focused feature requests, and first-run beta
+RunPub is MIT-licensed. Bugs, focused feature requests, and first-run beta
 feedback belong in the provided GitHub issue forms; broader questions and ideas
 belong in GitHub Discussions. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [launch plan](docs/LAUNCH.md).

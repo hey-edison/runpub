@@ -1,6 +1,6 @@
 # Production runbook
 
-RunPublic's public edge is a Cloudflare Worker backed by Durable Objects and D1.
+RunPub's public edge is a Cloudflare Worker backed by Durable Objects and D1.
 The Railway edge is retained as a single-replica fallback.
 
 ## First deployment
@@ -29,18 +29,18 @@ The Railway edge is retained as a single-replica fallback.
 
 4. Generate a 32-byte-or-longer admin secret using a password generator. Store
    it in your password manager or at
-   `~/.config/runpublic/operator-admin-secret` with mode `0600`, then send it
+   `~/.config/runpub/operator-admin-secret` with mode `0600`, then send it
    directly to Wrangler without adding it to shell history:
 
    ```bash
-   npx wrangler secret put RUNPUBLIC_ADMIN_SECRET --config cloudflare/wrangler.jsonc
+   npx wrangler secret put RUNPUB_ADMIN_SECRET --config cloudflare/wrangler.jsonc
    ```
 
 5. Register a GitHub OAuth app owned by the operator organization. Use
    `https://runpublic.dev` as its homepage and callback URL, enable Device Flow,
-   and set the public client ID as `RUNPUBLIC_GITHUB_CLIENT_ID` in
+   and set the public client ID as `RUNPUB_GITHUB_CLIENT_ID` in
    `cloudflare/wrangler.jsonc`. No client secret is needed for GitHub device
-   flow. Keep `RUNPUBLIC_SIGNUPS_ENABLED=false` until the policies, rate limits,
+   flow. Keep `RUNPUB_SIGNUPS_ENABLED=false` until the policies, rate limits,
    and smoke checks below are complete.
 
 6. Validate and deploy:
@@ -55,13 +55,13 @@ The wildcard route handles tunnel hostnames. The apex `runpublic.dev` entry is a
 Worker Custom Domain, so Cloudflare creates its DNS record and certificate. Do
 not delete the Railway custom domain while it is the rollback origin.
 
-7. Verify `runpublic login --no-browser` with a test GitHub account, then change
-   `RUNPUBLIC_SIGNUPS_ENABLED` to `true`, deploy again, and repeat the login,
+7. Verify `runpub login --no-browser` with a test GitHub account, then change
+   `RUNPUB_SIGNUPS_ENABLED` to `true`, deploy again, and repeat the login,
    HTTP, webhook, and WebSocket smoke tests.
 
 ## Create or recover a developer account
 
-Developers normally run `runpublic login`. GitHub device login provisions one
+Developers normally run `runpub login`. GitHub device login provisions one
 account per immutable GitHub user ID and gives it the configured free service
 quota.
 
@@ -76,11 +76,11 @@ npm run cloudflare:admin -- create-account keshavmac 25
 The command prints a developer token exactly once. Deliver it through a secure
 channel. The developer logs in with a temporary token file:
 
-Set `RUNPUBLIC_TOKEN_OUTPUT_FILE` before the admin command when you want the
+Set `RUNPUB_TOKEN_OUTPUT_FILE` before the admin command when you want the
 one-time token written directly to a new mode-`0600` file instead of displayed.
 
 ```bash
-runpublic login \
+runpub login \
   --server https://edge.runpublic.dev \
   --account keshavmac \
   --token-file /path/to/temporary-token
@@ -112,11 +112,11 @@ a D1 migration destructively; deploy forward-compatible code first.
 
 ## Secrets and data
 
-- Cloudflare secret: `RUNPUBLIC_ADMIN_SECRET`.
+- Cloudflare secret: `RUNPUB_ADMIN_SECRET`.
 - D1 stores GitHub user IDs, account metadata, token hashes, reservations, and
   audit events. GitHub access tokens are used transiently and are not stored.
 - Developer machines store their plaintext token in
-  `~/.config/runpublic/config.json` with mode `0600` by default.
+  `~/.config/runpub/config.json` with mode `0600` by default.
 - Do not log authorization headers, plaintext tokens, request bodies, or webhook
   contents.
 - Review the published privacy, acceptable-use, and abuse-response policies

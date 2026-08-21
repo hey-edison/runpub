@@ -1,16 +1,16 @@
 name: Bug report
-description: Report reproducible RunPublic behavior that appears incorrect.
+description: Report reproducible RunPub behavior that appears incorrect.
 title: "[Bug]: "
 labels: [bug, triage]
 body:
   - type: markdown
     attributes:
-      value: Never include RunPublic tokens, private URLs, webhook payload secrets, or personal data.
+      value: Never include RunPub tokens, private URLs, webhook payload secrets, or personal data.
   - type: input
     id: version
     attributes:
-      label: RunPublic version
-      description: Output from `runpublic version`.
+      label: RunPub version
+      description: Output from `runpub version`.
     validations:
       required: true
   - type: dropdown

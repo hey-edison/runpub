@@ -26,14 +26,14 @@ test('Cloudflare and Node edges generate identical short and truncated hostnames
 test('Cloudflare edge health response does not require database access', async () => {
   const response = await worker.fetch(
     new Request('https://edge.runpublic.dev/health'),
-    { RUNPUBLIC_DOMAIN: 'runpublic.dev' },
+    { RUNPUB_DOMAIN: 'runpublic.dev' },
     { waitUntil() {} },
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     status: 'ok',
     architecture: 'durable-objects',
-    version: '0.2.0',
+    version: '0.6.0',
   });
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 });
@@ -41,17 +41,31 @@ test('Cloudflare edge health response does not require database access', async (
 test('Cloudflare edge serves a secure product page at the apex domain', async () => {
   const response = await worker.fetch(
     new Request('https://runpublic.dev/'),
-    { RUNPUBLIC_DOMAIN: 'runpublic.dev' },
+    { RUNPUB_DOMAIN: 'runpublic.dev' },
     { waitUntil() {} },
   );
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /npm install --global runpublic/);
+  assert.match(await response.text(), /npm install --global runpub/);
   assert.match(response.headers.get('content-type'), /text\/html/);
   assert.match(response.headers.get('content-security-policy'), /default-src 'none'/);
   assert.match(response.headers.get('strict-transport-security'), /includeSubDomains/);
 });
 
 test('GitHub device login fails closed until the operator enables it', async () => {
+  const response = await worker.fetch(
+    new Request('https://edge.runpublic.dev/_runpub/auth/github/device/start', {
+      method: 'POST',
+    }),
+    { RUNPUB_DOMAIN: 'runpublic.dev', RUNPUB_SIGNUPS_ENABLED: 'false' },
+    { waitUntil() {} },
+  );
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: { code: 'SIGNUP_UNAVAILABLE', message: 'GitHub sign-in is not configured' },
+  });
+});
+
+test('Cloudflare accepts former RunPublic environment and API names', async () => {
   const response = await worker.fetch(
     new Request('https://edge.runpublic.dev/_runpublic/auth/github/device/start', {
       method: 'POST',
@@ -60,9 +74,7 @@ test('GitHub device login fails closed until the operator enables it', async () 
     { waitUntil() {} },
   );
   assert.equal(response.status, 503);
-  assert.deepEqual(await response.json(), {
-    error: { code: 'SIGNUP_UNAVAILABLE', message: 'GitHub sign-in is not configured' },
-  });
+  assert.equal((await response.json()).error.code, 'SIGNUP_UNAVAILABLE');
 });
 
 test('Cloudflare does not double-compress encoded tunnel responses', () => {
@@ -82,7 +94,7 @@ test('Cloudflare does not double-compress encoded tunnel responses', () => {
 test('Cloudflare edge rejects hostnames outside its managed domain', async () => {
   const response = await worker.fetch(
     new Request('https://attacker.example/'),
-    { RUNPUBLIC_DOMAIN: 'runpublic.dev' },
+    { RUNPUB_DOMAIN: 'runpublic.dev' },
     { waitUntil() {} },
   );
   assert.equal(response.status, 404);

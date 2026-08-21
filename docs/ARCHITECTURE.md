@@ -1,4 +1,4 @@
-# RunPublic architecture
+# RunPub architecture
 
 ## Public production path
 
@@ -23,13 +23,13 @@ developer CLI                         public browser / webhook
 The Worker validates an API token against D1 before it accepts a tunnel. D1 is
 the permanent control plane: it stores GitHub identity IDs, accounts, SHA-256
 hashes of 256-bit random tokens, service reservations, quotas, and audit events.
-Plaintext RunPublic tokens are returned only once and are never stored by the
+Plaintext RunPub tokens are returned only once and are never stored by the
 service.
 
 For self-service login, the CLI uses GitHub's OAuth device flow with no requested
 repository scopes. The edge exchanges the approved device code, calls GitHub's
 `/user` endpoint, provisions exactly one account for the immutable GitHub user
-ID, issues a RunPublic token, and discards the GitHub access token. A unique D1
+ID, issues a RunPub token, and discards the GitHub access token. A unique D1
 index on `accounts.github_user_id` prevents duplicate identities even during
 concurrent login attempts.
 

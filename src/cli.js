@@ -11,7 +11,6 @@ import {
   removeAgentInstructions,
 } from './agent-instructions.js';
 import {
-  authConfigPath,
   createProjectConfig,
   loadAuthConfig,
   loadProjectConfig,
@@ -31,25 +30,25 @@ import { TunnelClient } from './tunnel-client.js';
 
 const DEFAULT_SERVER = 'https://edge.runpublic.dev';
 
-const HELP = `runpublic - expose local development services over HTTPS
+const HELP = `runpub - expose local development services over HTTPS
 
 Usage:
-  runpublic                         Auto-detect, start, and expose this project
-  runpublic <service>               Start and expose one configured service
-  runpublic all                     Start and expose every configured service
-  runpublic <port> [options]        Expose an already-running local port
-  runpublic login [--server <url>] [--account <namespace>] [--no-browser]
-  runpublic login [--server <url>] --account <name> (--token <token> | --token-file <path>)
-  runpublic whoami [--json]
-  runpublic init [--project <name>] [--json]
-  runpublic setup                     Re-run detection and replace the manifest
-  runpublic expose <port> --project <name> --service <name> [options]
-  runpublic run [service] [--json]
-  runpublic status [--json]
-  runpublic stop
-  runpublic agents [status|install|remove] [--json]
-  runpublic help
-  runpublic version
+  runpub                         Auto-detect, start, and expose this project
+  runpub <service>               Start and expose one configured service
+  runpub all                     Start and expose every configured service
+  runpub <port> [options]        Expose an already-running local port
+  runpub login [--server <url>] [--account <namespace>] [--no-browser]
+  runpub login [--server <url>] --account <name> (--token <token> | --token-file <path>)
+  runpub whoami [--json]
+  runpub init [--project <name>] [--json]
+  runpub setup                     Re-run detection and replace the manifest
+  runpub expose <port> --project <name> --service <name> [options]
+  runpub run [service] [--json]
+  runpub status [--json]
+  runpub stop
+  runpub agents [status|install|remove] [--json]
+  runpub help
+  runpub version
 
 First-run setup options:
   --services <folders>   Select detected folders, comma-separated
@@ -63,8 +62,8 @@ Expose options:
   --json                 Emit newline-delimited JSON events
 
 Authentication environment overrides:
-  RUNPUBLIC_SERVER, RUNPUBLIC_ACCOUNT, RUNPUBLIC_TOKEN
-  Legacy DEVPUBLIC_* names are also accepted.
+  RUNPUB_SERVER, RUNPUB_ACCOUNT, RUNPUB_TOKEN
+  Legacy RUNPUBLIC_* and DEVPUBLIC_* names are also accepted.
 `;
 
 function parseArguments(argv) {
@@ -170,9 +169,9 @@ function createReporter(json) {
         const publicPart = details.tunnelActive && details.publicUrl ? ` — ${details.publicUrl}` : '';
         process.stdout.write(`${details.service}: ${state} on ${details.localUrl}${publicPart}\n`);
       } else if (type === 'stop-requested') {
-        process.stdout.write(`Stopping RunPublic process ${details.pid}...\n`);
+        process.stdout.write(`Stopping RunPub process ${details.pid}...\n`);
       } else if (type === 'nothing-to-stop') {
-        process.stdout.write('No active RunPublic session was found for this project.\n');
+        process.stdout.write('No active RunPub session was found for this project.\n');
       } else if (type === 'agent-instructions') {
         const state = details.installed ? details.action : details.action === 'removed' ? 'removed' : 'not installed';
         process.stdout.write(`${details.agent} (${details.scope}): ${state} — ${details.path}\n`);
@@ -197,7 +196,7 @@ function edgeEndpoint(server, pathname) {
 }
 
 function credentialEndpoint(server) {
-  return edgeEndpoint(server, '/_runpublic/me');
+  return edgeEndpoint(server, '/_runpub/me');
 }
 
 async function responsePayload(response) {
@@ -228,9 +227,9 @@ function wait(milliseconds) {
 }
 
 async function githubDeviceLogin({ server, requestedAccount, noBrowser, reporter }) {
-  const startResponse = await fetch(edgeEndpoint(server, '/_runpublic/auth/github/device/start'), {
+  const startResponse = await fetch(edgeEndpoint(server, '/_runpub/auth/github/device/start'), {
     method: 'POST',
-    headers: { 'user-agent': 'runpublic-cli' },
+    headers: { 'user-agent': 'runpub-cli' },
     signal: AbortSignal.timeout(10_000),
   });
   const started = await responsePayload(startResponse);
@@ -251,9 +250,9 @@ async function githubDeviceLogin({ server, requestedAccount, noBrowser, reporter
   let intervalSeconds = Math.min(Math.max(Number(started.interval) || 5, 1), 30);
   while (Date.now() < deadline) {
     await wait(intervalSeconds * 1_000);
-    const response = await fetch(edgeEndpoint(server, '/_runpublic/auth/github/device/poll'), {
+    const response = await fetch(edgeEndpoint(server, '/_runpub/auth/github/device/poll'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'user-agent': 'runpublic-cli' },
+      headers: { 'content-type': 'application/json', 'user-agent': 'runpub-cli' },
       body: JSON.stringify({
         deviceCode: started.deviceCode,
         ...(requestedAccount ? { account: requestedAccount } : {}),
@@ -274,12 +273,12 @@ async function githubDeviceLogin({ server, requestedAccount, noBrowser, reporter
     }
     return { account: payload.account, token: payload.token.value };
   }
-  throw new Error('GitHub login timed out; run "runpublic login" to try again');
+  throw new Error('GitHub login timed out; run "runpub login" to try again');
 }
 
 async function verifyCredentials({ server, account, token }) {
   const response = await fetch(credentialEndpoint(server), {
-    headers: { authorization: `Bearer ${token}`, 'user-agent': 'runpublic-cli' },
+    headers: { authorization: `Bearer ${token}`, 'user-agent': 'runpub-cli' },
     signal: AbortSignal.timeout(10_000),
   });
   const payload = await responsePayload(response);
@@ -313,7 +312,7 @@ function signalExitCode(signal) {
 async function exposeCommand(positionals, flags, reporter) {
   assertAllowedFlags(flags, ['project', 'service', 'host', 'protocol', 'json']);
   if (positionals.length !== 1) {
-    throw new Error('usage: runpublic expose <port> --project <name> --service <name>');
+    throw new Error('usage: runpub expose <port> --project <name> --service <name>');
   }
 
   const port = Number(positionals[0]);
@@ -376,28 +375,38 @@ async function exposeCommand(positionals, flags, reporter) {
 }
 
 function environmentVariableName(serviceName) {
+  return `RUNPUB_${serviceName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_URL`;
+}
+
+function legacyEnvironmentVariableName(serviceName) {
   return `RUNPUBLIC_${serviceName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_URL`;
 }
 
 export function buildServiceEnvironment(auth, project, serviceName, service, allServices) {
   const env = { ...process.env };
   const domain = publicDomain(auth);
+  env.RUNPUB_PROJECT = project;
+  env.RUNPUB_SERVICE = serviceName;
   env.RUNPUBLIC_PROJECT = project;
   env.RUNPUBLIC_SERVICE = serviceName;
   if (domain) {
     for (const name of Object.keys(allServices)) {
       const publicUrl = `https://${createServiceLabel({ project, service: name, account: auth.account })}.${domain}`;
       env[environmentVariableName(name)] = publicUrl;
-      if (name === serviceName) env.RUNPUBLIC_URL = publicUrl;
+      env[legacyEnvironmentVariableName(name)] = publicUrl;
+      if (name === serviceName) {
+        env.RUNPUB_URL = publicUrl;
+        env.RUNPUBLIC_URL = publicUrl;
+      }
     }
   }
   for (const [name, rawValue] of Object.entries(service.env)) {
     const expanded = rawValue.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, variable) =>
       env[variable] === undefined ? match : env[variable],
     );
-    if (/\$\{RUNPUBLIC_[A-Z0-9_]+\}/.test(expanded)) {
+    if (/\$\{(?:RUNPUB|RUNPUBLIC)_[A-Z0-9_]+\}/.test(expanded)) {
       throw new Error(
-        `services.${serviceName}.env.${name} needs a public domain; set RUNPUBLIC_DOMAIN for this server`,
+        `services.${serviceName}.env.${name} needs a public domain; set RUNPUB_DOMAIN for this server`,
       );
     }
     env[name] = expanded;
@@ -447,7 +456,7 @@ async function waitForService(name, service, child) {
 async function runCommand(positionals, flags, reporter) {
   assertAllowedFlags(flags, ['json']);
   if (positionals.length > 1) {
-    throw new Error('usage: runpublic run [service] [--json]');
+    throw new Error('usage: runpub run [service] [--json]');
   }
 
   const auth = await loadAuthConfig();
@@ -623,7 +632,7 @@ export async function promptForServiceSelection(
   detection,
   { input = process.stdin, output = process.stdout } = {},
 ) {
-  output.write('\nRunPublic found several development services:\n\n');
+  output.write('\nRunPub found several development services:\n\n');
   for (const candidate of detection.candidates) {
     output.write(`  ${candidate.id}. ${candidateDescription(candidate)}\n`);
   }
@@ -657,7 +666,7 @@ export async function promptForAgentInstructions(
   try {
     while (true) {
       const answer = await readline.question(
-        'Make RunPublic the default for AI coding agents when they start development servers? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
+        'Make RunPub the default for AI coding agents when they start development servers? Adds global Codex/ChatGPT, Claude Code, and Antigravity instructions plus a Cursor rule for this project. [y/N] ',
       );
       const normalized = answer.trim().toLowerCase();
       if (normalized === 'y' || normalized === 'yes') return true;
@@ -690,7 +699,7 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
     try {
       existing = await loadProjectConfig();
     } catch (error) {
-      if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+      if (!String(error?.message).startsWith('could not find runpub.json')) throw error;
     }
   }
   let detection = await detectProject(process.cwd(), flags.project);
@@ -736,7 +745,7 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
   }
   if (!allowEmpty && Object.keys(detection.services).length === 0) {
     throw new Error(
-      'could not detect a development service; run "runpublic init --project <name>" and add its command and port to runpublic.json',
+      'could not detect a development service; run "runpub init --project <name>" and add its command and port to runpub.json',
     );
   }
   const filePath = await createProjectConfig(
@@ -766,14 +775,16 @@ async function ensureProjectConfig(reporter, flags = {}) {
   try {
     return await loadProjectConfig();
   } catch (error) {
-    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    if (!String(error?.message).startsWith('could not find runpub.json')) throw error;
     await initializeProject(flags, reporter);
     return await loadProjectConfig();
   }
 }
 
 function publicDomain(auth) {
-  if (process.env.RUNPUBLIC_DOMAIN) return process.env.RUNPUBLIC_DOMAIN;
+  if (process.env.RUNPUB_DOMAIN ?? process.env.RUNPUBLIC_DOMAIN) {
+    return process.env.RUNPUB_DOMAIN ?? process.env.RUNPUBLIC_DOMAIN;
+  }
   const hostname = new URL(auth.server).hostname;
   if (hostname === 'edge.runpublic.dev' || hostname.endsWith('.runpublic.dev')) {
     return 'runpublic.dev';
@@ -826,7 +837,7 @@ async function stopCommand(positionals, flags, reporter) {
   try {
     project = (await loadProjectConfig()).config.project;
   } catch (error) {
-    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    if (!String(error?.message).startsWith('could not find runpub.json')) throw error;
     project = await inferProjectName();
   }
 
@@ -848,14 +859,14 @@ async function stopCommand(positionals, flags, reporter) {
 async function agentsCommand(positionals, flags, reporter) {
   assertAllowedFlags(flags, ['json']);
   if (positionals.length > 1) {
-    throw new Error('usage: runpublic agents [status|install|remove] [--json]');
+    throw new Error('usage: runpub agents [status|install|remove] [--json]');
   }
   const action = positionals[0] ?? 'status';
   let projectDirectory = process.cwd();
   try {
     projectDirectory = (await loadProjectConfig()).directory;
   } catch (error) {
-    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    if (!String(error?.message).startsWith('could not find runpub.json')) throw error;
   }
 
   let results;
@@ -869,7 +880,7 @@ async function agentsCommand(positionals, flags, reporter) {
       action: result.installed ? 'installed' : 'missing',
     }));
   } else {
-    throw new Error('usage: runpublic agents [status|install|remove] [--json]');
+    throw new Error('usage: runpub agents [status|install|remove] [--json]');
   }
   for (const result of results) reporter.event('agent-instructions', result);
   return 0;
@@ -881,7 +892,7 @@ async function portShortcut(port, flags, reporter) {
   try {
     loaded = await loadProjectConfig();
   } catch (error) {
-    if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    if (!String(error?.message).startsWith('could not find runpub.json')) throw error;
   }
   const numericPort = Number(port);
   const matching = loaded
@@ -970,7 +981,11 @@ export async function runCli(argv = process.argv.slice(2)) {
       ]);
       if (positionals.length > 0) throw new Error('login does not accept positional arguments');
       const server = validateServer(
-        flags.server ?? process.env.RUNPUBLIC_SERVER ?? process.env.DEVPUBLIC_SERVER ?? DEFAULT_SERVER,
+        flags.server ??
+          process.env.RUNPUB_SERVER ??
+          process.env.RUNPUBLIC_SERVER ??
+          process.env.DEVPUBLIC_SERVER ??
+          DEFAULT_SERVER,
       );
       const manualLogin = Boolean(flags.token || flags['token-file'] || flags['skip-verify']);
       let account;
@@ -1010,7 +1025,7 @@ export async function runCli(argv = process.argv.slice(2)) {
       reporter.event('whoami', {
         server: auth.server,
         account: auth.account,
-        configPath: authConfigPath(),
+        configPath: auth.source,
       });
       return 0;
     }
@@ -1043,7 +1058,7 @@ export async function runCli(argv = process.argv.slice(2)) {
     }
     if (command === '__port__') {
       const [port, ...extraPositionals] = positionals;
-      if (extraPositionals.length > 0) throw new Error('usage: runpublic <port> [options]');
+      if (extraPositionals.length > 0) throw new Error('usage: runpub <port> [options]');
       return await portShortcut(port, flags, reporter);
     }
     if (command === 'status') {
@@ -1053,13 +1068,13 @@ export async function runCli(argv = process.argv.slice(2)) {
       return await stopCommand(positionals, flags, reporter);
     }
 
-    throw new Error(`unknown command "${command}" (run "runpublic help")`);
+    throw new Error(`unknown command "${command}" (run "runpub help")`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (jsonRequested) {
       process.stderr.write(`${JSON.stringify({ type: 'error', message })}\n`);
     } else {
-      process.stderr.write(`runpublic: ${message}\n`);
+      process.stderr.write(`runpub: ${message}\n`);
     }
     return 1;
   }

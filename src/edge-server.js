@@ -67,7 +67,7 @@ function tokenEntries(tokens) {
   if (tokens && typeof tokens === 'object' && !Array.isArray(tokens)) {
     return Object.entries(tokens);
   }
-  throw new TypeError('tokens must map RunPublic account names to bearer tokens');
+  throw new TypeError('tokens must map RunPub account names to bearer tokens');
 }
 
 function authenticate(tokens, suppliedToken, allowAnonymous) {
@@ -193,12 +193,12 @@ export function createEdgeServer(options = {}) {
       events.emit('tunnelOffline', { hostname: tunnel.hostname });
     }
     for (const [id, pending] of pendingHttp) {
-      if (pending.tunnel === tunnel) failPendingRequest(id, 502, 'RunPublic tunnel disconnected');
+      if (pending.tunnel === tunnel) failPendingRequest(id, 502, 'RunPub tunnel disconnected');
     }
     for (const [id, state] of publicWebSockets) {
       if (state.tunnel !== tunnel) continue;
       publicWebSockets.delete(id);
-      state.socket.close(1012, 'RunPublic tunnel disconnected');
+      state.socket.close(1012, 'RunPub tunnel disconnected');
     }
   }
 
@@ -440,10 +440,11 @@ export function createEdgeServer(options = {}) {
   });
 
   const server = http.createServer((request, response) => {
-    const path = new URL(request.url || '/', 'http://runpublic.invalid').pathname;
+    const path = new URL(request.url || '/', 'http://runpub.invalid').pathname;
     if (
       path === '/health' ||
       path === '/healthz' ||
+      path === '/_runpub/health' ||
       path === '/_runpublic/health' ||
       path === '/_devpublic/health'
     ) {
@@ -454,29 +455,33 @@ export function createEdgeServer(options = {}) {
         uptimeSeconds: Math.round(process.uptime()),
       });
     }
-    if (path === '/_runpublic/me') {
+    if (path === '/_runpub/me' || path === '/_runpublic/me') {
       const authentication = authenticate(tokens, bearerToken(request), false);
       if (!authentication.ok) {
-        response.setHeader('www-authenticate', 'Bearer realm="RunPublic"');
+        response.setHeader('www-authenticate', 'Bearer realm="RunPub"');
         return json(response, 401, {
-          error: { code: 'UNAUTHORIZED', message: 'The RunPublic token is invalid' },
+          error: { code: 'UNAUTHORIZED', message: 'The RunPub token is invalid' },
         });
       }
       return json(response, 200, { account: authentication.account });
     }
-    if (path === '/_runpublic/connect' || path === '/_devpublic/connect') {
+    if (
+      path === '/_runpub/connect' ||
+      path === '/_runpublic/connect' ||
+      path === '/_devpublic/connect'
+    ) {
       return text(response, 426, 'WebSocket upgrade required');
     }
 
     const hostname = requestHostname(request);
     const tunnel = tunnels.get(hostname);
     if (!tunnel || tunnel.socket.readyState !== WebSocket.OPEN) {
-      return text(response, 404, 'No active RunPublic tunnel for this hostname');
+      return text(response, 404, 'No active RunPub tunnel for this hostname');
     }
 
     const contentLength = Number(request.headers['content-length']);
     if (Number.isFinite(contentLength) && contentLength > maxRequestBodyBytes) {
-      return text(response, 413, 'Request body exceeded the RunPublic limit');
+      return text(response, 413, 'Request body exceeded the RunPub limit');
     }
 
     const chunks = [];
@@ -487,7 +492,7 @@ export function createEdgeServer(options = {}) {
       total += chunk.length;
       if (total > maxRequestBodyBytes) {
         rejected = true;
-        text(response, 413, 'Request body exceeded the RunPublic limit');
+        text(response, 413, 'Request body exceeded the RunPub limit');
         request.destroy();
         return;
       }
@@ -497,7 +502,7 @@ export function createEdgeServer(options = {}) {
       if (rejected || response.destroyed) return;
       const id = randomUUID();
       const timer = setTimeout(() => {
-        failPendingRequest(id, 504, 'RunPublic tunnel request timed out');
+        failPendingRequest(id, 504, 'RunPub tunnel request timed out');
         sendTunnel(tunnel, { type: 'http_cancel', id });
       }, requestTimeoutMs);
       timer.unref?.();
@@ -510,7 +515,7 @@ export function createEdgeServer(options = {}) {
         headers: createForwardHeaders(request.headers, request, { scheme: publicScheme }),
         body: Buffer.concat(chunks).toString('base64'),
       });
-      if (!sent) failPendingRequest(id, 502, 'RunPublic tunnel disconnected');
+      if (!sent) failPendingRequest(id, 502, 'RunPub tunnel disconnected');
     });
     request.on('aborted', () => {
       for (const [id, pending] of pendingHttp) {
@@ -523,10 +528,14 @@ export function createEdgeServer(options = {}) {
   });
 
   server.on('upgrade', (request, socket, head) => {
-    const path = new URL(request.url || '/', 'http://runpublic.invalid').pathname;
-    if (path === '/_runpublic/connect' || path === '/_devpublic/connect') {
+    const path = new URL(request.url || '/', 'http://runpub.invalid').pathname;
+    if (
+      path === '/_runpub/connect' ||
+      path === '/_runpublic/connect' ||
+      path === '/_devpublic/connect'
+    ) {
       const authentication = authenticate(tokens, bearerToken(request), allowAnonymous);
-      if (!authentication.ok) return rejectUpgrade(socket, 401, 'Invalid RunPublic token');
+      if (!authentication.ok) return rejectUpgrade(socket, 401, 'Invalid RunPub token');
       return agentWss.handleUpgrade(request, socket, head, (webSocket) => {
         agentWss.emit('connection', webSocket, request, authentication);
       });
@@ -534,7 +543,7 @@ export function createEdgeServer(options = {}) {
 
     const tunnel = tunnels.get(requestHostname(request));
     if (!tunnel || tunnel.socket.readyState !== WebSocket.OPEN) {
-      return rejectUpgrade(socket, 404, 'No active RunPublic tunnel for this hostname');
+      return rejectUpgrade(socket, 404, 'No active RunPub tunnel for this hostname');
     }
     publicWss.handleUpgrade(request, socket, head, (webSocket) => {
       publicWss.emit('connection', webSocket, request, tunnel);
@@ -568,7 +577,7 @@ export function createEdgeServer(options = {}) {
       for (const tunnel of connections) tunnel.socket.close(1001, 'Edge shutting down');
       for (const state of publicWebSockets.values()) state.socket.close(1001, 'Edge shutting down');
       for (const id of [...pendingHttp.keys()]) {
-        failPendingRequest(id, 503, 'RunPublic edge is shutting down');
+        failPendingRequest(id, 503, 'RunPub edge is shutting down');
       }
       agentWss.close();
       publicWss.close();

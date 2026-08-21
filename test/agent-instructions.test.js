@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -12,7 +12,7 @@ import {
 } from '../src/agent-instructions.js';
 
 async function fixture() {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-agents-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-agents-'));
   const home = path.join(directory, 'home');
   const projectDirectory = path.join(directory, 'project');
   await mkdir(projectDirectory, { recursive: true });
@@ -40,12 +40,12 @@ test('installs supported global instructions and a project Cursor rule', async (
   const agents = await readFile(agentsPath, 'utf8');
   assert.match(agents, /^# My existing instructions/m);
   assert.match(agents, new RegExp(MANAGED_START));
-  assert.match(agents, /runpublic status --json/);
+  assert.match(agents, /runpub status --json/);
   assert.match(agents, /both local and remote testing/);
-  assert.match(agents, /Do not start RunPublic for unit tests/);
+  assert.match(agents, /Do not start RunPub for unit tests/);
 
   const cursor = await readFile(
-    path.join(options.projectDirectory, '.cursor', 'rules', 'runpublic.mdc'),
+    path.join(options.projectDirectory, '.cursor', 'rules', 'runpub.mdc'),
     'utf8',
   );
   assert.match(cursor, /^---\ndescription:/);
@@ -68,6 +68,30 @@ test('installation is idempotent and updates only its managed block', async () =
   assert.ok(installed.every((target) => target.action === 'unchanged'));
 });
 
+test('migrates former RunPublic managed instructions and Cursor rule', async () => {
+  const options = await fixture();
+  const codexDirectory = path.join(options.home, '.codex');
+  const rulesDirectory = path.join(options.projectDirectory, '.cursor', 'rules');
+  await mkdir(codexDirectory, { recursive: true });
+  await mkdir(rulesDirectory, { recursive: true });
+  await writeFile(
+    path.join(codexDirectory, 'AGENTS.md'),
+    '# Existing\n<!-- runpublic:managed:start -->\nold text\n<!-- runpublic:managed:end -->\n',
+  );
+  const oldCursorPath = path.join(rulesDirectory, 'runpublic.mdc');
+  await writeFile(
+    oldCursorPath,
+    '---\ndescription: old\nalwaysApply: true\n---\n<!-- runpublic:managed:start -->\nold text\n<!-- runpublic:managed:end -->\n',
+  );
+
+  await installAgentInstructions(options);
+  const agents = await readFile(path.join(codexDirectory, 'AGENTS.md'), 'utf8');
+  assert.match(agents, new RegExp(MANAGED_START));
+  assert.doesNotMatch(agents, /runpublic:managed/);
+  assert.match(await readFile(path.join(rulesDirectory, 'runpub.mdc'), 'utf8'), /RunPub/);
+  await assert.rejects(access(oldCursorPath), (error) => error.code === 'ENOENT');
+});
+
 test('uses AGENTS.override.md when Codex global override already exists', async () => {
   const options = await fixture();
   const codexDirectory = path.join(options.home, '.codex');
@@ -77,7 +101,7 @@ test('uses AGENTS.override.md when Codex global override already exists', async 
 
   const results = await installAgentInstructions(options);
   assert.equal(results.find((target) => target.id === 'codex').path, overridePath);
-  assert.match(await readFile(overridePath, 'utf8'), /RunPublic development servers/);
+  assert.match(await readFile(overridePath, 'utf8'), /RunPub development servers/);
 });
 
 test('preserves instruction-file symlinks', async () => {
@@ -123,7 +147,7 @@ test('rejects malformed managed markers instead of overwriting the file', async 
 
   await assert.rejects(
     installAgentInstructions(options),
-    /invalid RunPublic managed block/,
+    /invalid RunPub managed block/,
   );
   assert.equal(await readFile(claudePath, 'utf8'), `# Keep me\n${MANAGED_START}\n`);
   await assert.rejects(

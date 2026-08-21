@@ -1,6 +1,6 @@
 # Code of conduct
 
-RunPublic is committed to a respectful, harassment-free community. Be kind,
+RunPub is committed to a respectful, harassment-free community. Be kind,
 assume good intent, critique ideas rather than people, and respect privacy and
 security boundaries. Harassment, discrimination, threats, doxxing, and abusive
 or disruptive behavior are not accepted in project spaces.

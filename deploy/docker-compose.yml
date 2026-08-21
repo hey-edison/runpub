@@ -5,10 +5,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      RUNPUBLIC_DOMAIN: ${RUNPUBLIC_DOMAIN}
-      RUNPUBLIC_TOKENS_JSON: ${RUNPUBLIC_TOKENS_JSON}
-      RUNPUBLIC_PUBLIC_SCHEME: ${RUNPUBLIC_PUBLIC_SCHEME:-https}
-      RUNPUBLIC_PORT: 8080
+      RUNPUB_DOMAIN: ${RUNPUB_DOMAIN}
+      RUNPUB_TOKENS_JSON: ${RUNPUB_TOKENS_JSON}
+      RUNPUB_PUBLIC_SCHEME: ${RUNPUB_PUBLIC_SCHEME:-https}
+      RUNPUB_PORT: 8080
     ports:
       - "127.0.0.1:8080:8080"
 
@@ -19,9 +19,9 @@ services:
     depends_on:
       - edge
     environment:
-      RUNPUBLIC_DOMAIN: ${RUNPUBLIC_DOMAIN}
-      RUNPUBLIC_TLS_CERT_FILE: ${RUNPUBLIC_TLS_CERT_FILE:-/certs/wildcard.crt}
-      RUNPUBLIC_TLS_KEY_FILE: ${RUNPUBLIC_TLS_KEY_FILE:-/certs/wildcard.key}
+      RUNPUB_DOMAIN: ${RUNPUB_DOMAIN}
+      RUNPUB_TLS_CERT_FILE: ${RUNPUB_TLS_CERT_FILE:-/certs/wildcard.crt}
+      RUNPUB_TLS_KEY_FILE: ${RUNPUB_TLS_KEY_FILE:-/certs/wildcard.key}
     ports:
       - "80:80"
       - "443:443"

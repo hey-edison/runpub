@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "RunPub project configuration (legacy filename)",
+  "title": "RunPub project configuration",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "services"],

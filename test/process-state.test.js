@@ -11,8 +11,8 @@ import {
 } from '../src/process-state.js';
 
 test('stores private per-project process state and removes it cleanly', async () => {
-  const home = await mkdtemp(path.join(os.tmpdir(), 'runpublic-process-'));
-  const env = { RUNPUBLIC_HOME: home };
+  const home = await mkdtemp(path.join(os.tmpdir(), 'runpub-process-'));
+  const env = { RUNPUB_HOME: home };
   const filePath = await saveProcessState({
     version: 1,
     pid: process.pid,
@@ -31,3 +31,18 @@ test('stores private per-project process state and removes it cleanly', async ()
   assert.deepEqual(await listProcessStates('state-demo', env), []);
 });
 
+test('discovers active state written by the former RunPublic CLI', async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'runpub-legacy-process-'));
+  const filePath = await saveProcessState({
+    version: 1,
+    pid: process.pid,
+    project: 'legacy-state-demo',
+    startedAt: new Date().toISOString(),
+    services: [{ name: 'backend', port: 8000 }],
+  }, { RUNPUBLIC_HOME: path.join(base, 'runpublic') });
+
+  const states = await listProcessStates('legacy-state-demo', { XDG_CONFIG_HOME: base });
+  assert.equal(states.length, 1);
+  assert.equal(states[0].filePath, filePath);
+  await removeProcessState(filePath);
+});

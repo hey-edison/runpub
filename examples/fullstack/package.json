@@ -1,12 +1,12 @@
 {
-  "name": "runpublic-fullstack-example",
+  "name": "runpub-fullstack-example",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start:frontend": "node frontend/server.js",
     "start:backend": "node backend/server.js",
-    "runpublic": "runpublic",
+    "runpub": "runpub",
     "devpublic": "devpublic"
   }
 }

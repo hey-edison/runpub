@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping improve RunPublic.
+Thank you for helping improve RunPub.
 
 Use GitHub Discussions for setup questions and early ideas. Open an issue for a
 reproducible bug or a feature with a concrete use case. Security issues belong

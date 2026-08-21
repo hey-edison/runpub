@@ -19,17 +19,18 @@ import { saveProcessState } from '../src/process-state.js';
 
 const execFileAsync = promisify(execFile);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const cli = path.join(repository, 'bin', 'runpublic.js');
+const cli = path.join(repository, 'bin', 'runpub.js');
+const legacyCli = path.join(repository, 'bin', 'runpublic.js');
 
 async function invoke(args, cwd) {
   return await execFileAsync(process.execPath, [cli, ...args], {
     cwd,
-    env: { ...process.env, RUNPUBLIC_HOME: path.join(cwd, '.auth') },
+    env: { ...process.env, RUNPUB_HOME: path.join(cwd, '.auth') },
   });
 }
 
 test('init auto-detects a project and writes a ready-to-run configuration', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-init-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-init-'));
   await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
     name: 'mobile-demo',
     scripts: { dev: 'vite' },
@@ -39,7 +40,7 @@ test('init auto-detects a project and writes a ready-to-run configuration', asyn
   const result = await invoke(['init', '--json'], directory);
   const events = result.stdout.trim().split('\n').map((line) => JSON.parse(line));
   assert.deepEqual(events.map((event) => event.type), ['init', 'detected']);
-  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  const config = JSON.parse(await readFile(path.join(directory, 'runpub.json'), 'utf8'));
   assert.deepEqual(config, {
     project: 'mobile-demo',
     services: { frontend: { command: 'npm run dev', port: 5173 } },
@@ -47,7 +48,7 @@ test('init auto-detects a project and writes a ready-to-run configuration', asyn
 });
 
 test('non-interactive setup selects services by folder for an ambiguous repository', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-select-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-select-'));
   for (const name of ['admin-web', 'customer-web']) {
     const serviceDirectory = path.join(directory, name);
     await mkdir(serviceDirectory);
@@ -60,14 +61,14 @@ test('non-interactive setup selects services by folder for an ambiguous reposito
   const result = await invoke(['init', '--services', 'customer-web', '--json'], directory);
   const events = result.stdout.trim().split('\n').map((line) => JSON.parse(line));
   assert.deepEqual(events.map((event) => event.type), ['selected', 'init', 'detected']);
-  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  const config = JSON.parse(await readFile(path.join(directory, 'runpub.json'), 'utf8'));
   assert.deepEqual(config.services, {
     frontend: { command: 'npm run dev', port: 5173, cwd: 'customer-web' },
   });
 });
 
 test('non-interactive ambiguous setup fails with actionable choices', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-ambiguous-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-ambiguous-'));
   for (const name of ['admin-web', 'customer-web']) {
     const serviceDirectory = path.join(directory, name);
     await mkdir(serviceDirectory);
@@ -84,19 +85,19 @@ test('non-interactive ambiguous setup fails with actionable choices', async () =
 });
 
 test('setup re-runs detection and replaces an existing manifest', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-setup-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-setup-'));
   await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
     name: 'fresh-project',
     scripts: { dev: 'vite' },
     devDependencies: { vite: '^7.0.0' },
   })}\n`);
-  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+  await writeFile(path.join(directory, 'runpub.json'), `${JSON.stringify({
     project: 'old-project',
     services: { old: { command: 'old-command', port: 9999, cwd: 'legacy' } },
   })}\n`);
 
   await invoke(['setup', '--json'], directory);
-  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  const config = JSON.parse(await readFile(path.join(directory, 'runpub.json'), 'utf8'));
   assert.equal(config.project, 'fresh-project');
   assert.deepEqual(config.services, {
     frontend: { command: 'npm run dev', port: 5173 },
@@ -104,51 +105,57 @@ test('setup re-runs detection and replaces an existing manifest', async () => {
 });
 
 test('setup preserves custom commands and environment for a reselected service', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-setup-preserve-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-setup-preserve-'));
   await mkdir(path.join(directory, 'web'));
   await writeFile(path.join(directory, 'web', 'package.json'), `${JSON.stringify({
     name: 'web',
     scripts: { dev: 'next dev' },
     dependencies: { next: '^16.0.0', react: '^19.0.0' },
   })}\n`);
-  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+  await writeFile(path.join(directory, 'runpub.json'), `${JSON.stringify({
     project: 'custom-project',
     services: {
       frontend: {
         command: 'npm run custom-dev',
         port: 3100,
         cwd: 'web',
-        env: { NEXT_PUBLIC_API_BASE: '${RUNPUBLIC_BACKEND_URL}/api/v1' },
+        env: { NEXT_PUBLIC_API_BASE: '${RUNPUB_BACKEND_URL}/api/v1' },
       },
     },
   })}\n`);
 
   await invoke(['setup', '--json'], directory);
-  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  const config = JSON.parse(await readFile(path.join(directory, 'runpub.json'), 'utf8'));
   assert.equal(config.services.frontend.command, 'npm run custom-dev');
   assert.equal(config.services.frontend.port, 3100);
   assert.equal(
     config.services.frontend.env.NEXT_PUBLIC_API_BASE,
-    '${RUNPUBLIC_BACKEND_URL}/api/v1',
+    '${RUNPUB_BACKEND_URL}/api/v1',
   );
 });
 
 test('natural service, all, and numeric shortcuts route through the CLI', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-help-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-help-'));
   for (const args of [
     ['frontend', '--help'],
     ['all', '--help'],
     ['3000', '--help'],
   ]) {
     const result = await invoke(args, directory);
-    assert.match(result.stdout, /runpublic <service>/);
+    assert.match(result.stdout, /runpub <service>/);
     assert.equal(result.stderr, '');
   }
 });
 
+test('retains the former runpublic command as an alias', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-legacy-bin-'));
+  const result = await execFileAsync(process.execPath, [legacyCli, 'help'], { cwd: directory });
+  assert.match(result.stdout, /^runpub -/);
+});
+
 test('status reports configured local services without requiring login', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-status-'));
-  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-status-'));
+  await writeFile(path.join(directory, 'runpub.json'), `${JSON.stringify({
     project: 'status-demo',
     services: { frontend: { command: 'npm run dev', port: 49151 } },
   })}\n`);
@@ -163,15 +170,15 @@ test('status reports configured local services without requiring login', async (
 });
 
 test('stop reports when no managed project process is active', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-stop-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-stop-'));
   const result = await invoke(['stop'], directory);
-  assert.match(result.stdout, /No active RunPublic session/i);
+  assert.match(result.stdout, /No active RunPub session/i);
 });
 
-test('stop terminates a managed RunPublic process from another terminal', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-stop-live-'));
+test('stop terminates a managed RunPub process from another terminal', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-stop-live-'));
   const authHome = path.join(directory, '.auth');
-  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+  await writeFile(path.join(directory, 'runpub.json'), `${JSON.stringify({
     project: 'stop-demo',
     services: { frontend: { command: 'npm run dev', port: 3000 } },
   })}\n`);
@@ -187,9 +194,9 @@ test('stop terminates a managed RunPublic process from another terminal', async 
       project: 'stop-demo',
       startedAt: new Date().toISOString(),
       services: [{ name: 'frontend', port: 3000 }],
-    }, { RUNPUBLIC_HOME: authHome });
+    }, { RUNPUB_HOME: authHome });
     const result = await invoke(['stop'], directory);
-    assert.match(result.stdout, new RegExp(`Stopping RunPublic process ${child.pid}`));
+    assert.match(result.stdout, new RegExp(`Stopping RunPub process ${child.pid}`));
     const [code, signal] = await exitPromise;
     assert.ok(code === 0 || signal === 'SIGTERM');
   } finally {
@@ -199,7 +206,7 @@ test('stop terminates a managed RunPublic process from another terminal', async 
 
 test('injects stable cross-service URLs and expands configured environment', () => {
   const services = {
-    frontend: { env: { NEXT_PUBLIC_API_BASE: '${RUNPUBLIC_BACKEND_URL}/api/v1' } },
+    frontend: { env: { NEXT_PUBLIC_API_BASE: '${RUNPUB_BACKEND_URL}/api/v1' } },
     backend: { env: {} },
   };
   const env = buildServiceEnvironment(
@@ -210,13 +217,14 @@ test('injects stable cross-service URLs and expands configured environment', () 
     services,
   );
   assert.equal(
-    env.RUNPUBLIC_FRONTEND_URL,
+    env.RUNPUB_FRONTEND_URL,
     'https://ai-native-ats-frontend-keshavmac.runpublic.dev',
   );
   assert.equal(
-    env.RUNPUBLIC_BACKEND_URL,
+    env.RUNPUB_BACKEND_URL,
     'https://ai-native-ats-backend-keshavmac.runpublic.dev',
   );
+  assert.equal(env.RUNPUBLIC_BACKEND_URL, env.RUNPUB_BACKEND_URL);
   assert.equal(
     env.NEXT_PUBLIC_API_BASE,
     'https://ai-native-ats-backend-keshavmac.runpublic.dev/api/v1',
@@ -273,7 +281,7 @@ test('interactive setup renders choices and returns the selected services', asyn
 
   const selected = await promptForServiceSelection(detection, { input, output });
   assert.deepEqual(selected, ['2', '3']);
-  assert.match(rendered, /RunPublic found several development services/);
+  assert.match(rendered, /RunPub found several development services/);
   assert.match(rendered, /2\. edison-web/);
   assert.match(rendered, /comma-separated numbers/);
 });
@@ -287,13 +295,13 @@ test('AI-agent setup prompt is explicit and defaults to disabled', async () => {
     input.end(answer);
 
     assert.equal(await promptForAgentInstructions({ input, output }), expected);
-    assert.match(rendered, /Make RunPublic the default for AI coding agents/);
+    assert.match(rendered, /Make RunPub the default for AI coding agents/);
     assert.match(rendered, /\[y\/N\]/);
   }
 });
 
 test('init --agents installs agent instructions non-interactively', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-agents-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-cli-agents-'));
   const home = path.join(directory, 'home');
   await writeFile(path.join(directory, 'package.json'), `${JSON.stringify({
     name: 'agent-demo',
@@ -305,7 +313,7 @@ test('init --agents installs agent instructions non-interactively', async () => 
     ...process.env,
     HOME: home,
     CODEX_HOME: path.join(home, '.codex'),
-    RUNPUBLIC_HOME: path.join(directory, '.auth'),
+    RUNPUB_HOME: path.join(directory, '.auth'),
   };
   const { stdout } = await execFileAsync(process.execPath, [cli, 'init', '--agents', '--json'], {
     cwd: directory,
@@ -315,10 +323,10 @@ test('init --agents installs agent instructions non-interactively', async () => 
   assert.equal(events.filter((event) => event.type === 'agent-instructions').length, 4);
   assert.match(
     await readFile(path.join(home, '.codex', 'AGENTS.md'), 'utf8'),
-    /RunPublic development servers/,
+    /RunPub development servers/,
   );
   assert.match(
-    await readFile(path.join(directory, '.cursor', 'rules', 'runpublic.mdc'), 'utf8'),
+    await readFile(path.join(directory, '.cursor', 'rules', 'runpub.mdc'), 'utf8'),
     /alwaysApply: true/,
   );
 

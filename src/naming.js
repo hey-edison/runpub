@@ -28,7 +28,7 @@ export function slugifyDnsLabel(value) {
 }
 
 /**
- * Build the left-most DNS label used by RunPublic. Long names retain a stable
+ * Build the left-most DNS label used by RunPub. Long names retain a stable
  * hash suffix so truncation cannot make two different service names collide.
  */
 export function createServiceLabel({ project, service, account }) {
@@ -57,7 +57,7 @@ export function normalizeDomain(domain) {
   // A configured base domain may include a port in local development.
   const withoutPort = normalized.replace(/:\d+$/, '');
   if (!withoutPort || withoutPort.length > 253) {
-    throw new TypeError('A valid RunPublic base domain is required');
+    throw new TypeError('A valid RunPub base domain is required');
   }
 
   const labels = withoutPort.split('.');
@@ -69,7 +69,7 @@ export function normalizeDomain(domain) {
         !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
     )
   ) {
-    throw new TypeError('A valid RunPublic base domain is required');
+    throw new TypeError('A valid RunPub base domain is required');
   }
 
   return withoutPort;

@@ -1,16 +1,16 @@
 # Open-source and public-beta launch plan
 
-RunPublic should be both an open-source developer tool and an operator-hosted
+RunPub should be both an open-source developer tool and an operator-hosted
 service. GitHub is where developers inspect the code, report issues, contribute,
 and star the project. npm is how they install the CLI. `runpublic.dev` is the
 managed network that makes the URLs work.
 
 ## Recommended sequence
 
-1. Create a public GitHub repository named `runpublic` and push this code.
+1. Create a public GitHub repository named `runpub` and push this code.
 2. Add the repository URL to `package.json`, enable Discussions, private
    vulnerability reporting, Dependabot, and branch protection requiring CI.
-3. Publish `runpublic` to npm. Configure npm Trusted Publishing for
+3. Publish `runpub` to npm. Configure npm Trusted Publishing for
    `.github/workflows/publish.yml` after the first package exists.
 4. Invite 10-20 developers manually. Give each one a token and a 15-minute task:
    install, expose an existing app, send a webhook, stop it, and tell you where
@@ -24,7 +24,7 @@ managed network that makes the URLs work.
 
 - One sentence: “Stable HTTPS URLs for every local frontend and backend, from
   one global CLI.”
-- A 20-second example showing install, login, bare `runpublic`, and a webhook.
+- A 20-second example showing install, login, bare `runpub`, and a webhook.
 - Why it exists and how it differs from generic random-URL tunnel tools.
 - The honest beta limits and security warning.
 - One request: try it on a real project and open an issue or Discussion.

@@ -4,14 +4,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-const HELP = `RunPublic operator admin
+const HELP = `RunPub operator admin
 
 Environment:
-  RUNPUBLIC_ADMIN_URL       Default: https://edge.runpublic.dev
-  RUNPUBLIC_ADMIN_SECRET    Optional environment override
-  RUNPUBLIC_ADMIN_SECRET_FILE
-                            Default: ~/.config/runpublic/operator-admin-secret
-  RUNPUBLIC_TOKEN_OUTPUT_FILE
+  RUNPUB_ADMIN_URL       Default: https://edge.runpublic.dev
+  RUNPUB_ADMIN_SECRET    Optional environment override
+  RUNPUB_ADMIN_SECRET_FILE
+                            Default: ~/.config/runpub/operator-admin-secret
+  RUNPUB_TOKEN_OUTPUT_FILE
                             Optional private file for newly issued developer token
 
 Commands:
@@ -27,17 +27,23 @@ if (!command || command === 'help' || command === '--help') {
   process.exit(0);
 }
 
-const baseUrl = String(process.env.RUNPUBLIC_ADMIN_URL || 'https://edge.runpublic.dev').replace(/\/$/, '');
+const baseUrl = String(
+  process.env.RUNPUB_ADMIN_URL ||
+    process.env.RUNPUBLIC_ADMIN_URL ||
+    'https://edge.runpublic.dev',
+).replace(/\/$/, '');
 const adminSecretFile = path.resolve(
-  process.env.RUNPUBLIC_ADMIN_SECRET_FILE ||
-    path.join(os.homedir(), '.config', 'runpublic', 'operator-admin-secret'),
+  process.env.RUNPUB_ADMIN_SECRET_FILE ||
+    process.env.RUNPUBLIC_ADMIN_SECRET_FILE ||
+    path.join(os.homedir(), '.config', 'runpub', 'operator-admin-secret'),
 );
 const adminSecret =
+  process.env.RUNPUB_ADMIN_SECRET ||
   process.env.RUNPUBLIC_ADMIN_SECRET ||
   (await readFile(adminSecretFile, 'utf8').then((value) => value.trim()).catch(() => ''));
 if (!adminSecret) {
   process.stderr.write(
-    `RUNPUBLIC_ADMIN_SECRET is required (or save it with mode 0600 at ${adminSecretFile})\n`,
+    `RUNPUB_ADMIN_SECRET is required (or save it with mode 0600 at ${adminSecretFile})\n`,
   );
   process.exit(1);
 }
@@ -66,18 +72,18 @@ try {
     const [account, rawMaxServices] = args;
     if (!account) throw new Error('create-account requires an account name');
     const maxServices = rawMaxServices === undefined ? undefined : Number(rawMaxServices);
-    result = await request('/_runpublic/admin/accounts', {
+    result = await request('/_runpub/admin/accounts', {
       method: 'POST',
       body: { account, ...(maxServices === undefined ? {} : { maxServices }) },
     });
   } else if (command === 'list-accounts') {
-    result = await request('/_runpublic/admin/accounts');
+    result = await request('/_runpub/admin/accounts');
   } else if (command === 'create-token') {
     const account = args[0];
     if (!account) throw new Error('create-token requires an account name');
     const revokeExisting = args.includes('--revoke-existing');
     const name = args.slice(1).find((value) => value !== '--revoke-existing');
-    result = await request(`/_runpublic/admin/accounts/${encodeURIComponent(account)}/tokens`, {
+    result = await request(`/_runpub/admin/accounts/${encodeURIComponent(account)}/tokens`, {
       method: 'POST',
       body: { name, revokeExisting },
     });
@@ -85,20 +91,22 @@ try {
     const [account, tokenId] = args;
     if (!account || !tokenId) throw new Error('revoke-token requires an account and token ID');
     await request(
-      `/_runpublic/admin/accounts/${encodeURIComponent(account)}/tokens/${encodeURIComponent(tokenId)}`,
+      `/_runpub/admin/accounts/${encodeURIComponent(account)}/tokens/${encodeURIComponent(tokenId)}`,
       { method: 'DELETE' },
     );
     result = { revoked: true, tokenId };
   } else {
     throw new Error(`unknown command "${command}"`);
   }
-  if (result?.token?.value && process.env.RUNPUBLIC_TOKEN_OUTPUT_FILE) {
-    const outputPath = path.resolve(process.env.RUNPUBLIC_TOKEN_OUTPUT_FILE);
+  const tokenOutputFile =
+    process.env.RUNPUB_TOKEN_OUTPUT_FILE || process.env.RUNPUBLIC_TOKEN_OUTPUT_FILE;
+  if (result?.token?.value && tokenOutputFile) {
+    const outputPath = path.resolve(tokenOutputFile);
     await writeFile(outputPath, `${result.token.value}\n`, { flag: 'wx', mode: 0o600 });
     result.token.value = `<written to ${outputPath}>`;
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } catch (error) {
-  process.stderr.write(`runpublic-admin: ${error.message}\n`);
+  process.stderr.write(`runpub-admin: ${error.message}\n`);
   process.exitCode = 1;
 }

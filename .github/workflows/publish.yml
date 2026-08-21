@@ -23,8 +23,8 @@ jobs:
       - name: Publish when this version is new
         run: |
           PACKAGE_VERSION=$(node --print "require('./package.json').version")
-          if npm view "runpublic@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            echo "runpublic@${PACKAGE_VERSION} is already published"
+          if npm view "runpub@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "runpub@${PACKAGE_VERSION} is already published"
           else
             npm publish --access public
           fi

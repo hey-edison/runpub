@@ -1,6 +1,6 @@
 # Security policy
 
-RunPublic exposes local services to the public Internet, so security reports are
+RunPub exposes local services to the public Internet, so security reports are
 treated as high priority.
 
 ## Supported versions
@@ -23,5 +23,5 @@ Test only accounts and tunnels you own. Do not access another developer's
 hostname, degrade the hosted service, exfiltrate data, or retain sensitive data.
 Good-faith, non-destructive reports following these rules are welcome.
 
-Never publish RunPublic tokens. Revoke a suspected token immediately and rotate
+Never publish RunPub tokens. Revoke a suspected token immediately and rotate
 any local application credentials that may have crossed an exposed tunnel.

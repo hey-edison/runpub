@@ -11,27 +11,41 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 
-export const PROJECT_CONFIG_NAME = 'runpublic.json';
-export const LEGACY_PROJECT_CONFIG_NAME = 'devpublic.json';
-const PROJECT_CONFIG_NAMES = [PROJECT_CONFIG_NAME, LEGACY_PROJECT_CONFIG_NAME];
+export const PROJECT_CONFIG_NAME = 'runpub.json';
+export const LEGACY_PROJECT_CONFIG_NAMES = ['runpublic.json', 'devpublic.json'];
+const PROJECT_CONFIG_NAMES = [PROJECT_CONFIG_NAME, ...LEGACY_PROJECT_CONFIG_NAMES];
 
 const NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SUPPORTED_PROTOCOLS = new Set(['http', 'https']);
 
 function configHome(env = process.env) {
-  if (env.RUNPUBLIC_HOME ?? env.DEVPUBLIC_HOME) {
-    return path.resolve(env.RUNPUBLIC_HOME ?? env.DEVPUBLIC_HOME);
+  if (env.RUNPUB_HOME ?? env.RUNPUBLIC_HOME ?? env.DEVPUBLIC_HOME) {
+    return path.resolve(env.RUNPUB_HOME ?? env.RUNPUBLIC_HOME ?? env.DEVPUBLIC_HOME);
   }
 
   if (env.XDG_CONFIG_HOME) {
-    return path.join(path.resolve(env.XDG_CONFIG_HOME), 'runpublic');
+    return path.join(path.resolve(env.XDG_CONFIG_HOME), 'runpub');
   }
 
-  return path.join(os.homedir(), '.config', 'runpublic');
+  return path.join(os.homedir(), '.config', 'runpub');
 }
 
 export function authConfigPath(env = process.env) {
   return path.join(configHome(env), 'config.json');
+}
+
+export function authConfigPaths(env = process.env) {
+  const primary = authConfigPath(env);
+  if (env.RUNPUB_HOME ?? env.RUNPUBLIC_HOME ?? env.DEVPUBLIC_HOME) return [primary];
+
+  const base = env.XDG_CONFIG_HOME
+    ? path.resolve(env.XDG_CONFIG_HOME)
+    : path.join(os.homedir(), '.config');
+  return [
+    primary,
+    path.join(base, 'runpublic', 'config.json'),
+    path.join(base, 'devpublic', 'config.json'),
+  ];
 }
 
 function assertObject(value, label) {
@@ -203,25 +217,29 @@ export function validateServer(value) {
 
 export async function loadAuthConfig(env = process.env) {
   let stored = {};
-  const filePath = authConfigPath(env);
+  let filePath = authConfigPath(env);
 
-  try {
-    const contents = await readFile(filePath, 'utf8');
-    stored = JSON.parse(contents);
-    assertObject(stored, filePath);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') {
-      if (error instanceof SyntaxError) {
-        throw new Error(`invalid JSON in ${filePath}`);
+  for (const candidate of authConfigPaths(env)) {
+    try {
+      const contents = await readFile(candidate, 'utf8');
+      stored = JSON.parse(contents);
+      assertObject(stored, candidate);
+      filePath = candidate;
+      break;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        if (error instanceof SyntaxError) {
+          throw new Error(`invalid JSON in ${candidate}`);
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
   const auth = {
-    server: env.RUNPUBLIC_SERVER ?? env.DEVPUBLIC_SERVER ?? stored.server,
-    account: env.RUNPUBLIC_ACCOUNT ?? env.DEVPUBLIC_ACCOUNT ?? stored.account,
-    token: env.RUNPUBLIC_TOKEN ?? env.DEVPUBLIC_TOKEN ?? stored.token,
+    server: env.RUNPUB_SERVER ?? env.RUNPUBLIC_SERVER ?? env.DEVPUBLIC_SERVER ?? stored.server,
+    account: env.RUNPUB_ACCOUNT ?? env.RUNPUBLIC_ACCOUNT ?? env.DEVPUBLIC_ACCOUNT ?? stored.account,
+    token: env.RUNPUB_TOKEN ?? env.RUNPUBLIC_TOKEN ?? env.DEVPUBLIC_TOKEN ?? stored.token,
   };
 
   const missing = Object.entries(auth)
@@ -229,7 +247,7 @@ export async function loadAuthConfig(env = process.env) {
     .map(([key]) => key);
   if (missing.length > 0) {
     throw new Error(
-      `not logged in: missing ${missing.join(', ')} (run "runpublic login" or set RUNPUBLIC_* environment variables)`,
+      `not logged in: missing ${missing.join(', ')} (run "runpub login" or set RUNPUB_* environment variables)`,
     );
   }
 

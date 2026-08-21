@@ -11,7 +11,7 @@ async function writeJson(filePath, value) {
 }
 
 test('detects a single Vite project with its conventional port', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-vite-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-vite-'));
   await writeJson(path.join(directory, 'package.json'), {
     name: '@example/customer-portal',
     scripts: { dev: 'vite' },
@@ -27,7 +27,7 @@ test('detects a single Vite project with its conventional port', async () => {
 });
 
 test('detects frontend and FastAPI services in a conventional monorepo', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-fullstack-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-fullstack-'));
   const frontend = path.join(directory, 'frontend');
   const backend = path.join(directory, 'backend');
   await mkdir(frontend);
@@ -54,7 +54,7 @@ test('detects frontend and FastAPI services in a conventional monorepo', async (
 });
 
 test('detects package-manager workspaces and disambiguates repeated roles', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-workspaces-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-workspaces-'));
   await mkdir(path.join(directory, 'apps', 'dashboard'), { recursive: true });
   await mkdir(path.join(directory, 'apps', 'admin'), { recursive: true });
   await writeJson(path.join(directory, 'package.json'), {
@@ -86,7 +86,7 @@ test('detects package-manager workspaces and disambiguates repeated roles', asyn
 });
 
 test('discovers unconventional top-level apps and finalizes a user selection', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-choice-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpub-choice-'));
   for (const name of ['careers-web', 'edison-web']) {
     const serviceDirectory = path.join(directory, name);
     await mkdir(serviceDirectory);

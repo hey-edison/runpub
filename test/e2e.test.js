@@ -241,8 +241,8 @@ test("streams protocol v2 HTTP requests and responses in bounded chunks", async 
         JSON.stringify({
           type: "registered",
           protocol: 2,
-          hostname: "stream-api-keshavmac.runpublic.test",
-          publicUrl: "https://stream-api-keshavmac.runpublic.test",
+          hostname: "stream-api-keshavmac.runpub.test",
+          publicUrl: "https://stream-api-keshavmac.runpub.test",
           limits: { requestBodyBytes: 10_000_000, responseBodyBytes: 10_000_000 }
         })
       );

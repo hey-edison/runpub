@@ -12,4 +12,4 @@ ENV NODE_ENV=production
 EXPOSE 8080
 
 USER node
-CMD ["runpublic-edge"]
+CMD ["runpub-edge"]

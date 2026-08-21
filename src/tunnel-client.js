@@ -24,16 +24,16 @@ function normalizeLocalProtocol(protocol) {
 
 function tunnelSocketUrl(server, { account, project, service }) {
   let value = String(server || '').trim();
-  if (!value) throw new TypeError('A RunPublic edge server URL is required');
+  if (!value) throw new TypeError('A RunPub edge server URL is required');
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = `https://${value}`;
 
   const url = new URL(value);
   if (url.protocol === 'https:') url.protocol = 'wss:';
   else if (url.protocol === 'http:') url.protocol = 'ws:';
   else if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-    throw new TypeError('RunPublic server URL must use http, https, ws, or wss');
+    throw new TypeError('RunPub server URL must use http, https, ws, or wss');
   }
-  url.pathname = '/_runpublic/connect';
+  url.pathname = '/_runpub/connect';
   url.search = new URLSearchParams({
     protocol: '2',
     account: String(account),
@@ -157,7 +157,7 @@ export class TunnelClient extends EventEmitter {
     if (this.stopped) return;
 
     const headers = {
-      'user-agent': 'runpublic-cli',
+      'user-agent': 'runpub-cli',
     };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
 
@@ -194,7 +194,7 @@ export class TunnelClient extends EventEmitter {
     });
     socket.on('unexpected-response', (request, response) => {
       const error = new Error(
-        `RunPublic edge rejected the connection with HTTP ${response.statusCode || 'unknown'}`,
+        `RunPub edge rejected the connection with HTTP ${response.statusCode || 'unknown'}`,
       );
       response.resume();
       request.abort();
@@ -481,7 +481,7 @@ export class TunnelClient extends EventEmitter {
             );
             if (!sent) {
               state.settled = true;
-              response.destroy(new Error('RunPublic tunnel disconnected'));
+              response.destroy(new Error('RunPub tunnel disconnected'));
               this.localRequests.delete(id);
             }
           };
