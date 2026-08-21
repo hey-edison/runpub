@@ -91,7 +91,7 @@ test('setup re-runs detection and replaces an existing manifest', async () => {
   })}\n`);
   await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
     project: 'old-project',
-    services: { old: { command: 'old-command', port: 9999 } },
+    services: { old: { command: 'old-command', port: 9999, cwd: 'legacy' } },
   })}\n`);
 
   await invoke(['setup', '--json'], directory);
@@ -100,6 +100,36 @@ test('setup re-runs detection and replaces an existing manifest', async () => {
   assert.deepEqual(config.services, {
     frontend: { command: 'npm run dev', port: 5173 },
   });
+});
+
+test('setup preserves custom commands and environment for a reselected service', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'runpublic-cli-setup-preserve-'));
+  await mkdir(path.join(directory, 'web'));
+  await writeFile(path.join(directory, 'web', 'package.json'), `${JSON.stringify({
+    name: 'web',
+    scripts: { dev: 'next dev' },
+    dependencies: { next: '^16.0.0', react: '^19.0.0' },
+  })}\n`);
+  await writeFile(path.join(directory, 'runpublic.json'), `${JSON.stringify({
+    project: 'custom-project',
+    services: {
+      frontend: {
+        command: 'npm run custom-dev',
+        port: 3100,
+        cwd: 'web',
+        env: { NEXT_PUBLIC_API_BASE: '${RUNPUBLIC_BACKEND_URL}/api/v1' },
+      },
+    },
+  })}\n`);
+
+  await invoke(['setup', '--json'], directory);
+  const config = JSON.parse(await readFile(path.join(directory, 'runpublic.json'), 'utf8'));
+  assert.equal(config.services.frontend.command, 'npm run custom-dev');
+  assert.equal(config.services.frontend.port, 3100);
+  assert.equal(
+    config.services.frontend.env.NEXT_PUBLIC_API_BASE,
+    '${RUNPUBLIC_BACKEND_URL}/api/v1',
+  );
 });
 
 test('natural service, all, and numeric shortcuts route through the CLI', async () => {

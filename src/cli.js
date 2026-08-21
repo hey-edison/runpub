@@ -637,6 +637,14 @@ export async function promptForServiceSelection(
 }
 
 async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
+  let existing;
+  if (flags.force) {
+    try {
+      existing = await loadProjectConfig();
+    } catch (error) {
+      if (!String(error?.message).startsWith('could not find runpublic.json')) throw error;
+    }
+  }
   let detection = await detectProject(process.cwd(), flags.project);
   if (detection.ambiguous) {
     let selectedIds;
@@ -660,6 +668,23 @@ async function initializeProject(flags, reporter, { allowEmpty = false } = {}) {
       count: detection.detections.length,
       services: detection.detections.map((service) => service.name),
     });
+  }
+  if (existing) {
+    for (const detectedService of detection.detections) {
+      const sameDirectory = Object.entries(existing.config.services).filter(
+        ([, service]) => service.cwd === detectedService.cwd,
+      );
+      const previous = sameDirectory.find(
+        ([previousName]) => previousName === detectedService.name,
+      ) ?? (sameDirectory.length === 1 ? sameDirectory[0] : undefined);
+      if (!previous) continue;
+      detection.services[detectedService.name] = {
+        ...detection.services[detectedService.name],
+        ...previous[1],
+      };
+      detectedService.command = previous[1].command;
+      detectedService.port = previous[1].port;
+    }
   }
   if (!allowEmpty && Object.keys(detection.services).length === 0) {
     throw new Error(

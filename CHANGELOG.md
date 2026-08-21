@@ -8,6 +8,8 @@
   detected, then assign clean frontend/backend aliases from the selection.
 - Add `--services <folders>` and `--yes` for coding agents and CI environments
   that cannot answer an interactive prompt.
+- Add `runpublic setup` for reconfiguration while preserving custom settings
+  for reselected services.
 
 ## 0.3.0 - 2026-08-21
 

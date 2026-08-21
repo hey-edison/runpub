@@ -85,6 +85,9 @@ runpublic stop           # stop this project's managed RunPublic sessions
 runpublic setup          # reopen detection and replace the saved selection
 ```
 
+`runpublic setup` preserves custom commands, ports, and environment mappings
+for services selected again by the same name or folder.
+
 The original explicit forms, such as `runpublic run frontend` and `runpublic
 expose 3000 --project demo --service frontend`, remain supported for scripts.
 
