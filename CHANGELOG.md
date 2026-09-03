@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4 - 2026-09-03
+
+- Update the `wrangler` development dependency to 4.127.1, moving the local
+  Cloudflare toolchain (miniflare and workerd) to the 2026-08-28 runtime.
+- The published CLI package is unchanged; this release only refreshes the
+  development toolchain and lockfile.
+
 ## 0.6.3 - 2026-08-21
 
 - Ask for AI coding-agent integration once during interactive RunPub login
